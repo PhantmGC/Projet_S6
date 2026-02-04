@@ -20,11 +20,11 @@ long oldRight = 0;
 unsigned long debutEchelon = 0;
 int cas = 0;
 
-float v1 = 0.0; // La plus ancienne
+float v1 = 0.0;
 float v2 = 0.0;
 float v3 = 0.0;
 float v4 = 0.0;
-float v5 = 0.0; // La plus récente
+float v5 = 0.0;
 
 void initMoteurs() {
   DDRL = 0x18 ;
@@ -67,13 +67,13 @@ void loop() {
         MoteurGD(400, 400); // 0V à 5V
       } 
       else if (t < 4000) {
-        MoteurGD(67, 67);   // echelon à 5V
+        MoteurGD(67, 67); // echelon à 5V
       } 
       else if (t < 6000) {
-        MoteurGD(0, 0);     // echelon à 6V
+        MoteurGD(0, 0); // echelon à 6V
       } 
       else {
-        StopMoteurGD;       // arret
+        StopMoteurGD; // arret
         cas = 2; 
       }
 
@@ -94,9 +94,9 @@ void loop() {
         // Affichage de la vitesse par rapport au temps
         Serial.print(t);
         Serial.print(",");
-        Serial.print(tr_min_R);       // Courbe Bleue (souvent)
+        Serial.print(tr_min_R);
         Serial.print(",");
-        Serial.println(vitesse_filtree); // Courbe Rouge (souvent)
+        Serial.println(vitesse_filtree);
 
         oldRight = newRight;
         previousMicros = currentMicros;
