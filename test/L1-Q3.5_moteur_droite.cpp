@@ -1,9 +1,6 @@
 #include <Encoder.h>
 
-
 Encoder knobRight(19, 27);
-Encoder knobLeft(18, 29);
-
 
 #define Thash 800
 #define Stop 400
@@ -14,17 +11,13 @@ Encoder knobLeft(18, 29);
 #define MoteurGD(Vg,Vd) MoteurG(Vg);MoteurD(Vd)
 #define StopMoteurGD MoteurGD(Stop,Stop)
 
+// Paramètres de mesure
+unsigned long previousMicros = 0;
+const unsigned long TE_US = 1000;    // TE
+const float N_IMP = 1204.0;         // Nombre d'incréments par tour
 
-// --- Paramètres de mesure (Question 3.2) ---
-unsigned long previousMillis = 0;
-const int TE = 100;         // TE echantillonage
-const float N_IMP = 1204.0; // Nombre d'increment par tour de roue
-
-
-long oldLeft = 0;
 long oldRight = 0;
 int cas = 0;
-
 
 void initMoteurs() {
   DDRL = 0x18 ;
@@ -36,74 +29,46 @@ void initMoteurs() {
   TIMSK5 = 1 << TOIE5;
 }
 
-
 ISR (TIMER5_OVF_vect) { LedToggle; }
-
 
 void setup() {
   Serial.begin(115200);
-  pinMode(43,OUTPUT);
-  digitalWrite(43,0);
+  pinMode(43, OUTPUT);
+  digitalWrite(43, 0);
   initMoteurs();
   sei();
-  digitalWrite(43,1);  
-}
+  digitalWrite(43, 1);  
 
+  Serial.println("Vitesse_D(tr/min)");
+}
 
 void loop() {
   int Value_JX = analogRead(A2);
-  unsigned long currentMillis = millis();
+  unsigned long currentMicros = micros();
 
-
-  switch (cas){
+  switch (cas) {
     case 0:
-      delay(1000);
-      if(Value_JX >= 700) cas = 1;
+      if (Value_JX >= 700) {
+        previousMicros = micros(); // Reset du timer avant de commencer
+        cas = 1;
+      }
       break;
 
+    case 1:
+      MoteurGD(200, 400);
 
-    case 1 :
-      MoteurGD(200, 200);
+      if (currentMicros - previousMicros >= TE_US) {
 
-
-      // Calcul toute les 100ms (TE)
-      if (currentMillis - previousMillis >= TE) {
-        long newLeft = knobLeft.read();
         long newRight = knobRight.read();
-
-
-        // Calcul du delta d'increment sur 100ms
-        long deltaP_L = newLeft - oldLeft;
         long deltaP_R = newRight - oldRight;
 
+        float tr_min_R = (deltaP_R / N_IMP) / (TE_US / 60000000.0);
 
-        //Calcul gauche en tr/min et tr/s
-        float tr_s_L = (deltaP_L / N_IMP) / (TE / 1000.0);
-        float tr_min_L = tr_s_L * 60.0;
-
-
-        //Calcul droite en tr/min et tr/s
-        float tr_s_R = (deltaP_R / N_IMP) / (TE / 1000.0);
-        float tr_min_R = tr_s_R * 60.0;
-
-
-        // Affichage console pour CoolTerm
-        Serial.print(currentMillis);
-        Serial.print(","); 
-        Serial.print(tr_min_L);
-        Serial.print(",");
         Serial.println(tr_min_R);
 
-
-        oldLeft = newLeft;
         oldRight = newRight;
-        previousMillis = currentMillis;
+        previousMicros = currentMicros;
       }
-
-      if(Value_JX >= 700) cas = 0;
-        MoteurGD(400, 400);
-      break;
-
       break;
   }
 }
