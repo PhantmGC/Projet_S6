@@ -48,6 +48,12 @@ void setup() {
   Serial.println("t_us;cmd;v_tr_min");
 }
 
+void calculerTension() {
+  float v = vitesseActuelle;
+  // (v * (Plage Tension / Plage Vitesse)) - Décalage
+  tensionResultat = (v * (12.0 / 800.0)) - 6.0;
+}
+
 void loop() {
   int Value_JX = analogRead(A2);
   unsigned long now_ms = millis();
