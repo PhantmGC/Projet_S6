@@ -3,34 +3,31 @@
 Encoder knobRight(19, 27);
 
 #define Thash 800
-#define Stop 400
-#define Vmax Thash
+#define Stop  400
 #define LedToggle digitalWrite(13, !digitalRead(13))
-#define MoteurG(Vg) OCR5A=Vg
-#define MoteurD(Vd) OCR5B=Vd
-#define MoteurGD(Vg,Vd) MoteurG(Vg);MoteurD(Vd)
-#define StopMoteurGD MoteurGD(Stop,Stop)
+#define MoteurG(Vg) OCR5A = (Vg)
+#define MoteurD(Vd) OCR5B = (Vd)
+#define MoteurGD(Vg,Vd) do{ MoteurG(Vg); MoteurD(Vd); }while(0)
+#define StopMoteurGD MoteurGD(Stop, Stop)
 
-// Paramètres de mesure
+// Mesure vitesse
 unsigned long previousMicros = 0;
-const unsigned long TE_US = 2000;    // 2ms
+const unsigned long TE_US = 1000;     // 1 ms
 const float N_IMP = 1204.0;
 
 long oldRight = 0;
-unsigned long debutEchelon = 0;
 int cas = 0;
 
-// Variables pour 3.6 (Moyenne Glissante M=5)
-float v1=0, v2=0, v3=0, v4=0, v5=0;
+//Essai : inversion brusque 
+const int CMD_POS = 500;              // commande "positive" (>Stop)
+const int CMD_NEG = 300;              // commande "négative" (<Stop)
+const unsigned long DUREE_MS = 2000;  // durée de chaque phase
 
-// Variables pour 3.7 (Filtre Numérique Passe-bas)
-float vitesse_filtree_num = 0.0; 
-float alpha = 0.2; // Coefficient de lissage (entre 0.0 et 1.0)
-// Plus alpha est petit, plus le lissage est fort mais lent.
+unsigned long t0_ms = 0;
 
 void initMoteurs() {
-  DDRL = 0x18 ;
-  DDRB = 0x80 ;
+  DDRL = 0x18;
+  DDRB = 0x80;
   TCCR5A = (1 << COM5A1) + (1 << COM5B1);
   TCCR5B = (1 << ICNC5) + (1 << WGM53) + (1 << CS50);
   ICR5 = Thash;
@@ -38,7 +35,7 @@ void initMoteurs() {
   TIMSK5 = 1 << TOIE5;
 }
 
-ISR (TIMER5_OVF_vect) { LedToggle; }
+ISR(TIMER5_OVF_vect) { LedToggle; }
 
 void setup() {
   Serial.begin(115200);
@@ -46,41 +43,89 @@ void setup() {
   digitalWrite(43, 0);
   initMoteurs();
   sei();
-  digitalWrite(43, 1);  
-  // En-tête pour Excel/Traceur série
-  Serial.println("Temps(ms),Brute,MoyenneGlissante,FiltreNumerique");
+  digitalWrite(43, 1);
+
+  Serial.println("t_us;cmd;v_tr_min");
 }
 
 void loop() {
-  unsigned long t = millis();
+  int Value_JX = analogRead(A2);
+  unsigned long now_ms = millis();
+  unsigned long now_us = micros();
 
-  // Séquence d’échelons
-  int cmdD = Stop;
-  if (t < 1000) cmdD = Stop;          // 0-1s : stop
-  else if (t < 3000) cmdD = 500;      // 1-3s : échelon "positif"
-  else if (t < 4000) cmdD = Stop;     // 3-4s : stop
-  else if (t < 5000) cmdD = Stop;     // 4-5s : stop
-  else if (t < 7000) cmdD = 300;      // 5-7s : échelon "négatif"
-  else cmdD = Stop;                   // >7s : stop
+  switch (cas) {
 
-  MoteurGD(Stop, cmdD);               // gauche stop, droite commandée
+    case 0:
+      // Attente départ
+      StopMoteurGD;
+      if (Value_JX >= 700) {
+        t0_ms = now_ms;
+        previousMicros = now_us;
+        oldRight = knobRight.read();
+        cas = 1;
+      }
+      break;
 
-  // Mesure vitesse toutes les 1 ms 
-  unsigned long currentMicros = micros();
-  if (currentMicros - previousMicros >= TE_US) {
-    long newRight = knobRight.read();
-    long deltaP_R = newRight - oldRight;
+    case 1: {
+      // Phase 1 : commande positive
+      // moteur DROIT commandé, GAUCHE à Stop
+      MoteurGD(Stop, CMD_POS);
 
-    float tr_min_R = (deltaP_R / N_IMP) / (TE_US / 60000000.0);
+      // Mesure toutes les 1 ms
+      if (now_us - previousMicros >= TE_US) {
+        long newRight = knobRight.read();
+        long deltaP_R = newRight - oldRight;
+        float tr_min_R = (deltaP_R / N_IMP) / (TE_US / 60000000.0);
 
-    // Afficher aussi la commande pour l’export
-    Serial.print(t);
-    Serial.print(";");
-    Serial.print(cmdD);
-    Serial.print(";");
-    Serial.println(tr_min_R);
+        Serial.print(now_us);
+        Serial.print(";");
+        Serial.print(CMD_POS);
+        Serial.print(";");
+        Serial.println(tr_min_R);
 
-    oldRight = newRight;
-    previousMicros = currentMicros;
+        oldRight = newRight;
+        previousMicros = now_us;
+      }
+
+      // Après DUREE_MS, on passe DIRECTEMENT à CMD_NEG (brusque 500 -> 300)
+      if (now_ms - t0_ms >= DUREE_MS) {
+        cas = 2;
+      }
+      break;
+    }
+
+    case 2: {
+      // Phase 2 : commande négative (inversion BRUSQUE)
+      MoteurGD(Stop, CMD_NEG);
+
+      if (now_us - previousMicros >= TE_US) {
+        long newRight = knobRight.read();
+        long deltaP_R = newRight - oldRight;
+        float tr_min_R = (deltaP_R / N_IMP) / (TE_US / 60000000.0);
+
+        Serial.print(now_us);
+        Serial.print(";");
+        Serial.print(CMD_NEG);
+        Serial.print(";");
+        Serial.println(tr_min_R);
+
+        oldRight = newRight;
+        previousMicros = now_us;
+      }
+
+      // Après encore DUREE_MS, stop
+      if (now_ms - t0_ms >= 2 * DUREE_MS) {
+        StopMoteurGD;
+        cas = 3;
+      }
+      break;
+    }
+
+    case 3:
+      // Fin essai
+      StopMoteurGD;
+      // (option) tu peux relancer en repoussant le joystick :
+      if (Value_JX < 700) cas = 0;
+      break;
   }
 }
