@@ -89,7 +89,7 @@ void loop() {
         float tr_min_R = (deltaP_R / N_IMP) / (TE_US / 60000000.0);
 
         // Calcul filtre numérique
-        vitesse_filtree = (alpha / (1.0 + alpha)) * old_vitesse_filtree + (1.0 / (1.0 + alpha)) * tr_min_R;
+        float vitesse_filtree = (alpha / (1.0 + alpha)) * old_vitesse_filtree + (1.0 / (1.0 + alpha)) * tr_min_R;
         // Affichage de la vitesse par rapport au temps
         Serial.print(t);
         Serial.print(",");
