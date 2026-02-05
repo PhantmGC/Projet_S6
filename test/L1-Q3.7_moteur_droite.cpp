@@ -12,12 +12,12 @@ Encoder knobRight(19, 27);
 #define StopMoteurGD MoteurGD(Stop,Stop)
 
 // Paramètres de mesure
-#define TE_US = 2000.0; // TE
-#define N_IMP = 1204.0; // Nombre d'incréments par tour
+#define TE_US 2000.0 // TE
+#define N_IMP 1204.0 // Nombre d'incréments par tour
 long previousMicros = 0;
 
 // Paramètre filtre numerique
-#define alpha = 1.591449
+#define alpha 1.591449
 float old_vitesse_filtree = 0.0;
 
 long oldRight = 0;
@@ -89,7 +89,7 @@ void loop() {
         float tr_min_R = (deltaP_R / N_IMP) / (TE_US / 60000000.0);
 
         // Calcul filtre numérique
-        float vitesse_filtree = (alpha/(1+alpha))*old_vitesse_filtree+(1/(1+alpha))
+        vitesse_filtree = (alpha / (1.0 + alpha)) * old_vitesse_filtree + (1.0 / (1.0 + alpha)) * tr_min_R;
         // Affichage de la vitesse par rapport au temps
         Serial.print(t);
         Serial.print(",");
