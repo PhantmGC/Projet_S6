@@ -48,36 +48,26 @@ void setup() {
   Serial.println("t_us;cmd;v_tr_min");
 }
 
-void calculerTension() {
-  float v = vitesseActuelle;
-  // (v * (Plage Tension / Plage Vitesse)) - Décalage
-  tensionResultat = (v * (12.0 / 800.0)) - 6.0;
-}
-
 void loop() {
   int Value_JX = analogRead(A2);
   unsigned long now_ms = millis();
   unsigned long now_us = micros();
 
-   switch (cas) {
+  switch (cas) {
 
-    // =======================
     case -1:
-    // ATTENTE JOYSTICK
-    // =======================
+      // Attente départ
       StopMoteurGD;
       if (Value_JX >= 700) {
-        t0_ms = now_ms;                 // départ chrono
+        t0_ms = now_ms;
         previousMicros = now_us;
         oldRight = knobRight.read();
-        cas = 0;                        // lancer la séquence
+        cas = 0;
       }
       break;
 
-    // =======================
     case 0:
     // STOP INITIAL (2 s)
-    // =======================
       StopMoteurGD;
 
       if (now_ms - t0_ms >= DUREE_MS) {
@@ -86,21 +76,21 @@ void loop() {
       }
       break;
 
-    // =======================
-    case 1:
-    // VITESSE POSITIVE
-    // =======================
+
+    case 1: {
+      // Phase 1 : commande positive
+      // moteur DROIT commandé, GAUCHE à Stop
       MoteurGD(Stop, CMD_POS);
 
+      // Mesure toutes les 1 ms
       if (now_us - previousMicros >= TE_US) {
         long newRight = knobRight.read();
         long deltaP_R = newRight - oldRight;
         float tr_min_R = (deltaP_R / N_IMP) / (TE_US / 60000000.0);
-        float Ueq = 6.0 * ((float)CMD_POS - Stop) / Stop;
 
         Serial.print(now_us);
         Serial.print(";");
-        Serial.print(Ueq, 3);
+        Serial.print(CMD_POS);
         Serial.print(";");
         Serial.println(tr_min_R);
 
@@ -108,27 +98,25 @@ void loop() {
         previousMicros = now_us;
       }
 
+      // Après DUREE_MS, on passe DIRECTEMENT à CMD_NEG (brusque 500 -> 300)
       if (now_ms - t0_ms >= DUREE_MS) {
-        t0_ms = now_ms;
         cas = 2;
       }
       break;
+    }
 
-    // =======================
-    case 2:
-    // INVERSION BRUSQUE
-    // =======================
+    case 2: {
+      // Phase 2 : commande négative (inversion BRUSQUE)
       MoteurGD(Stop, CMD_NEG);
 
       if (now_us - previousMicros >= TE_US) {
         long newRight = knobRight.read();
         long deltaP_R = newRight - oldRight;
         float tr_min_R = (deltaP_R / N_IMP) / (TE_US / 60000000.0);
-        float Ueq = 6.0 * ((float)CMD_NEG - Stop) / Stop;
 
         Serial.print(now_us);
         Serial.print(";");
-        Serial.print(Ueq, 3);
+        Serial.print(CMD_NEG);
         Serial.print(";");
         Serial.println(tr_min_R);
 
@@ -136,17 +124,18 @@ void loop() {
         previousMicros = now_us;
       }
 
-      if (now_ms - t0_ms >= DUREE_MS) {
-        t0_ms = now_ms;
+      // Après encore DUREE_MS, stop
+      if (now_ms - t0_ms >= 2 * DUREE_MS) {
+        StopMoteurGD;
         cas = 3;
       }
       break;
+    }
 
-    // =======================
     case 3:
-    // STOP FINAL
-    // =======================
+      // Fin essai
       StopMoteurGD;
+      if (Value_JX < 700) cas = 0;
       break;
   }
 }
