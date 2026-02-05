@@ -12,21 +12,23 @@ Encoder knobRight(19, 27);
 #define StopMoteurGD MoteurGD(Stop,Stop)
 
 // Paramètres de mesure
-unsigned long previousMicros = 0;
-const unsigned long TE_US = 2000;    // 2ms
-const float N_IMP = 1204.0;
+#define TE_US = 2000.0; // TE
+#define N_IMP = 1204.0; // Nombre d'incréments par tour
+long previousMicros = 0;
+
+// Paramètre filtre numerique
+#define alpha = 1.591449
+float old_vitesse_filtree = 0.0;
 
 long oldRight = 0;
-unsigned long debutEchelon = 0;
+long debutEchelon = 0;
 int cas = 0;
 
-// Variables pour 3.6 (Moyenne Glissante M=5)
-float v1=0, v2=0, v3=0, v4=0, v5=0;
-
-// Variables pour 3.7 (Filtre Numérique Passe-bas)
-float vitesse_filtree_num = 0.0; 
-float alpha = 0.2; // Coefficient de lissage (entre 0.0 et 1.0)
-// Plus alpha est petit, plus le lissage est fort mais lent.
+float v1 = 0.0;
+float v2 = 0.0;
+float v3 = 0.0;
+float v4 = 0.0;
+float v5 = 0.0;
 
 void initMoteurs() {
   DDRL = 0x18 ;
@@ -47,17 +49,17 @@ void setup() {
   initMoteurs();
   sei();
   digitalWrite(43, 1);  
-  // En-tête pour Excel/Traceur série
-  Serial.println("Temps(ms),Brute,MoyenneGlissante,FiltreNumerique");
+
+  Serial.println("Vitesse_G(tr/min)");
 }
 
 void loop() {
   int Value_JX = analogRead(A2);
-  unsigned long currentMicros = micros();
-  unsigned long t = millis() - debutEchelon;
+  long currentMicros = micros();
+  long t = millis() - debutEchelon; // temps écoule depuis le debut du test
 
   switch (cas) {
-    case 0: 
+    case 0: // Attente du signal de départ (Joystick)
       if (Value_JX >= 700) {
         debutEchelon = millis(); 
         cas = 1;
@@ -65,12 +67,17 @@ void loop() {
       break;
 
     case 1:
-      // Séquence d'échelons
-      if (t < 2000)      MoteurGD(400, 400); // 0V
-      else if (t < 4000) MoteurGD(67, 67);   // 5V
-      else if (t < 6000) MoteurGD(0, 0);     // 6V
+      if (t < 2000) {
+        MoteurGD(400, 400); // 0V à 5V
+      } 
+      else if (t < 4000) {
+        MoteurGD(67, 67); // echelon à 5V
+      } 
+      else if (t < 6000) {
+        MoteurGD(0, 0); // echelon à 6V
+      } 
       else {
-        StopMoteurGD;
+        StopMoteurGD; // arret
         cas = 2; 
       }
 
@@ -78,26 +85,19 @@ void loop() {
         long newRight = knobRight.read();
         long deltaP_R = newRight - oldRight;
 
-        // 1. Calcul vitesse brute
+        // Calcul vitesse en tr/min
         float tr_min_R = (deltaP_R / N_IMP) / (TE_US / 60000000.0);
-        
-        // 2. FILTRE 3.6 : Moyenne Glissante (M=5)
-        v1 = v2; v2 = v3; v3 = v4; v4 = v5; v5 = tr_min_R;
-        float vitesse_moy_glissante = (v1 + v2 + v3 + v4 + v5) / 5.0;
 
-        // 3. FILTRE 3.7 : Filtre Numérique (Récursif)
-        // Formule : Yn = alpha * Xn + (1 - alpha) * Yn-1
-        vitesse_filtree_num = (alpha * tr_min_R) + ((1.0 - alpha) * vitesse_filtree_num);
-
-        // Affichage pour comparaison
+        // Calcul filtre numérique
+        float vitesse_filtree = (alpha/(1+alpha))*old_vitesse_filtree+(1/(1+alpha))
+        // Affichage de la vitesse par rapport au temps
         Serial.print(t);
         Serial.print(",");
-        Serial.print(tr_min_R);           // Réelle
+        Serial.print(tr_min_R);
         Serial.print(",");
-        Serial.print(vitesse_moy_glissante); // 3.6
-        Serial.print(",");
-        Serial.println(vitesse_filtree_num);  // 3.7
+        Serial.println(vitesse_filtree);
 
+        old_vitesse_filtree = vitesse_filtree;
         oldRight = newRight;
         previousMicros = currentMicros;
       }
