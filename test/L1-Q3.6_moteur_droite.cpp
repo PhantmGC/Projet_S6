@@ -12,12 +12,12 @@ Encoder knobRight(19, 27);
 #define StopMoteurGD MoteurGD(Stop,Stop)
 
 // Paramètres de mesure
-unsigned long previousMicros = 0;
-const unsigned long TE_US = 2000;    // TE
-const float N_IMP = 1204.0;         // Nombre d'incréments par tour
+#define TE_US = 2000.0; // TE
+#define N_IMP = 1204.0; // Nombre d'incréments par tour
+long previousMicros = 0;
 
 long oldRight = 0;
-unsigned long debutEchelon = 0;
+long debutEchelon = 0;
 int cas = 0;
 
 float v1 = 0.0;
@@ -51,8 +51,8 @@ void setup() {
 
 void loop() {
   int Value_JX = analogRead(A2);
-  unsigned long currentMicros = micros();
-  unsigned long t = millis() - debutEchelon; // Temps écoulé depuis le début du test
+  long currentMicros = micros();
+  long t = millis() - debutEchelon; // temps écoule depuis le debut du test
 
   switch (cas) {
     case 0: // Attente du signal de départ (Joystick)
