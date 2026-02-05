@@ -59,33 +59,48 @@ void loop() {
   unsigned long now_ms = millis();
   unsigned long now_us = micros();
 
-  switch (cas) {
+   switch (cas) {
 
-    case 0:
-      // Attente départ
+    // =======================
+    case -1:
+    // ATTENTE JOYSTICK
+    // =======================
       StopMoteurGD;
       if (Value_JX >= 700) {
-        t0_ms = now_ms;
+        t0_ms = now_ms;                 // départ chrono
         previousMicros = now_us;
         oldRight = knobRight.read();
+        cas = 0;                        // lancer la séquence
+      }
+      break;
+
+    // =======================
+    case 0:
+    // STOP INITIAL (2 s)
+    // =======================
+      StopMoteurGD;
+
+      if (now_ms - t0_ms >= DUREE_MS) {
+        t0_ms = now_ms;
         cas = 1;
       }
       break;
 
-    case 1: {
-      // Phase 1 : commande positive
-      // moteur DROIT commandé, GAUCHE à Stop
+    // =======================
+    case 1:
+    // VITESSE POSITIVE
+    // =======================
       MoteurGD(Stop, CMD_POS);
 
-      // Mesure toutes les 1 ms
       if (now_us - previousMicros >= TE_US) {
         long newRight = knobRight.read();
         long deltaP_R = newRight - oldRight;
         float tr_min_R = (deltaP_R / N_IMP) / (TE_US / 60000000.0);
+        float Ueq = 6.0 * ((float)CMD_POS - Stop) / Stop;
 
         Serial.print(now_us);
         Serial.print(";");
-        Serial.print(CMD_POS);
+        Serial.print(Ueq, 3);
         Serial.print(";");
         Serial.println(tr_min_R);
 
@@ -93,25 +108,27 @@ void loop() {
         previousMicros = now_us;
       }
 
-      // Après DUREE_MS, on passe DIRECTEMENT à CMD_NEG (brusque 500 -> 300)
       if (now_ms - t0_ms >= DUREE_MS) {
+        t0_ms = now_ms;
         cas = 2;
       }
       break;
-    }
 
-    case 2: {
-      // Phase 2 : commande négative (inversion BRUSQUE)
+    // =======================
+    case 2:
+    // INVERSION BRUSQUE
+    // =======================
       MoteurGD(Stop, CMD_NEG);
 
       if (now_us - previousMicros >= TE_US) {
         long newRight = knobRight.read();
         long deltaP_R = newRight - oldRight;
         float tr_min_R = (deltaP_R / N_IMP) / (TE_US / 60000000.0);
+        float Ueq = 6.0 * ((float)CMD_NEG - Stop) / Stop;
 
         Serial.print(now_us);
         Serial.print(";");
-        Serial.print(CMD_NEG);
+        Serial.print(Ueq, 3);
         Serial.print(";");
         Serial.println(tr_min_R);
 
@@ -119,19 +136,17 @@ void loop() {
         previousMicros = now_us;
       }
 
-      // Après encore DUREE_MS, stop
-      if (now_ms - t0_ms >= 2 * DUREE_MS) {
-        StopMoteurGD;
+      if (now_ms - t0_ms >= DUREE_MS) {
+        t0_ms = now_ms;
         cas = 3;
       }
       break;
-    }
 
+    // =======================
     case 3:
-      // Fin essai
+    // STOP FINAL
+    // =======================
       StopMoteurGD;
-      // (option) tu peux relancer en repoussant le joystick :
-      if (Value_JX < 700) cas = 0;
       break;
   }
 }
