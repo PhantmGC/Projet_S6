@@ -13,8 +13,8 @@ Encoder knobRight(19, 27);
 #define StopMoteurGD MoteurGD(Stop,Stop)
 
 // Paramètres de mesure
-#define TE_US = 2000.0; // TE
-#define N_IMP = 1204.0; // Nombre d'incréments par tour
+#define TE_US 2000.0 // TE
+#define N_IMP 1204.0 // Nombre d'incréments par tour
 long previousMicros = 0;
 
 long oldRight = 0;
@@ -91,7 +91,7 @@ void loop() {
         float vitesse_filtree = (v1 + v2 + v3 + v4 + v5) / 5.0;
         // Affichage de la vitesse par rapport au temps
         Serial.print(t);
-        Serial.print(",")
+        Serial.print(",");
         Serial.println(vitesse_filtree);
 
         oldRight = newRight;
