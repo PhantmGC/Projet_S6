@@ -28,7 +28,7 @@ float consigne = 150.0;        // tr/min
 //  Variables de calcul 
 long oldG = 0, oldD = 0;
 float somme_errG = 0, somme_errD = 0;
-long previousMicros = 0;
+
 
 // Buffers pour filtre moyenne glissante (3 points)
 float bufG[3] = {0,0,0};
@@ -65,8 +65,8 @@ void loop() {
     previousMicros = currentMicros;
 
     // 1. MESURE DES VITESSES BRUTES 
-    long newG = knobG.read();
-    long newD = knobD.read();
+    long newG = knobLeft.read();
+    long newD = knobRight.read();
     
     // Vitesse en tr/min = (delta_tics / resolution) / (temps_en_minutes)
     float vitG_brute = ((newG - oldG) / N_IMP) / (TE_US / 60000000.0);
