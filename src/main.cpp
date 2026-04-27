@@ -20,16 +20,18 @@ long previousMicros = 0;
 // Paramètres de l'asservissement
 float Kp = 0.0162; 
 float Ki = 0.404;
-float consigne_vitesse = 150.0; // En tr/min 
-float somme_erreur = 0;
+float Kp_G = 0.0113, Ki_G = 0.452; // Moteur Gauche
+float Kp_D = 0.0162, Ki_D = 0.404; // Moteur Droit
+float consigne = 150.0;        // tr/min
 
-long oldRight = 0;
-long debutEchelon = 0;
-int cas = 0;
+//  Variables de calcul 
+long oldG = 0, oldD = 0;
+float somme_errG = 0, somme_errD = 0;
+long previousMicros = 0;
 
-float v1 = 0.0;
-float v2 = 0.0;
-float v3 = 0.0;
+// Buffers pour filtre moyenne glissante (3 points)
+float bufG[3] = {0,0,0};
+float bufD[3] = {0,0,0};
 
 void initMoteurs() {
   DDRL = 0x18 ;
@@ -51,72 +53,62 @@ void setup() {
   sei();
   digitalWrite(43, 1);  
 
-  Serial.println("Vitesse_G(tr/min)");
+  Serial.println("Temps,Consigne,VitG,VitD");
 }
 
 void loop() {
-  int Value_JX = analogRead(A2);
   long currentMicros = micros();
-  long t = millis() - debutEchelon; // temps écoule depuis le debut du test
 
- long currentMicros = micros();
-  
-  // On respecte la période d'échantillonnage TE_US (2000µs = 2ms)
+  // Boucle d'échantillonnage à 2ms (500Hz)
   if (currentMicros - previousMicros >= TE_US) {
     previousMicros = currentMicros;
 
-    // 1. MESURE de la vitesse actuelle (vitesse_filtree déjà calculée dans votre code)
-    long newRight = knobRight.read();
-    float deltaP_R = newRight - oldRight;
-    oldRight = newRight;
-    float v_reelle = (deltaP_R / N_IMP) / (TE_US / 60000000.0);
+    // --- 1. MESURE DES VITESSES BRUTES ---
+    long newG = knobG.read();
+    long newD = knobD.read();
     
-    // Application du filtre (votre moyenne glissante)
-    v1=v2; v2=v3; v3=v_reelle;
-    float vitesse_mesuree = (v1+v2+v3)/5.0;
-
-    // 2. CALCUL de l'erreur
-    float erreur = consigne_vitesse - vitesse_mesuree;
-
-    // 3. CALCUL de l'action Intégrale (avec gestion anti-windup simplifiée)
-    somme_erreur += erreur * (TE_US / 1000000.0);
-
-    // 4. CALCUL de la commande (Sortie du PI)
-    // On ajoute 400 car votre moteur s'arrête à 400 (offset)
-    // Attention au signe de Kp selon le sens de rotation voulu
-    float u = 400 - (Kp * erreur + Ki * somme_erreur);
-
-    // 5. SATURATION de la commande (Sécurité)
-    if (u > 800) u = 800;
-    if (u < 0)   u = 0;
+    // Vitesse en tr/min = (delta_tics / resolution) / (temps_en_minutes)
+    float vitG_brute = ((newG - oldG) / N_IMP) / (TE_US / 60000000.0);
+    float vitD_brute = ((newD - oldD) / N_IMP) / (TE_US / 60000000.0);
     
-    commande = u;
+    oldG = newG;
+    oldD = newD;
 
-    // 6. APPLICATION aux moteurs
-    MoteurD(commande); 
-    
-    // Debug
-    Serial.print(consigne_vitesse);
-    Serial.print(",");
-    Serial.println(vitesse_mesuree);
+    //  2. FILTRAGE (Moyenne glissante 3 points)
+    // Moteur Gauche
+    bufG[0] = bufG[1]; bufG[1] = bufG[2]; bufG[2] = vitG_brute;
+    float vitG_filtree = (bufG[0] + bufG[1] + bufG[2]) / 3.0;
+
+    // Moteur Droit
+    bufD[0] = bufD[1]; bufD[1] = bufD[2]; bufD[2] = vitD_brute;
+    float vitD_filtree = (bufD[0] + bufD[1] + bufD[2]) / 3.0;
+
+    //  3. CALCUL DES ERREURS
+    float errG = consigne - vitG_filtree;
+    float errD = consigne - vitD_filtree;
+
+    // 4. ACTIONS INTÉGRALES (avec dt = TE_US en secondes)
+    somme_errG += errG * (TE_US / 1000000.0);
+    somme_errD += errD * (TE_US / 1000000.0);
+
+    // 5. CALCUL DES COMMANDES PI 
+    // Rappel : 400 est l'arrêt. Le sens dépend du câblage (+ ou -)
+    float uG = Stop - (Kp_G * errG + Ki_G * somme_errG);
+    float uD = Stop - (Kp_D * errD + Ki_D * somme_errD);
+
+    // 6. SATURATIONS (Sécurité 0-800) 
+    if (uG > 800) uG = 800; if (uG < 0) uG = 0;
+    if (uD > 800) uD = 800; if (uD < 0) uD = 0;
+
+    // 7. ENVOI AUX MOTEURS
+    MoteurG((int)uG);
+    MoteurD((int)uD);
+
+    // --- DEBUG SÉRIE ---
+    Serial.print(millis()); Serial.print(",");
+    Serial.print(consigne); Serial.print(",");
+    Serial.print(vitG_filtree); Serial.print(",");
+    Serial.println(vitD_filtree);
   }
         
-        v1 = v2;
-        v2 = v3;
-        v3 = tr_min_R;
-
-        float vitesse_filtree = (v1 + v2 + v3 ) / 3.0;
-        // Affichage de la vitesse par rapport au temps
-        Serial.print(t);
-        Serial.print(",");
-        Serial.println(vitesse_filtree);
-
-        oldRight = newRight;
-        previousMicros = currentMicros;
-      }
-      break;
-      
-    case 2:
-      break;
-  }
 }
