@@ -1,8 +1,7 @@
-
 #include <Encoder.h>
 
-Encoder knobRight(19, 27);
-Encoder knobLeft(18, 29);
+Encoder knobG(18, 26);
+Encoder knobD(19, 27);
 
 #define Thash 800
 #define Stop 400
@@ -29,7 +28,6 @@ float consigne = 150.0;        // tr/min
 long oldG = 0, oldD = 0;
 float somme_errG = 0, somme_errD = 0;
 
-
 // Buffers pour filtre moyenne glissante (3 points)
 float bufG[3] = {0,0,0};
 float bufD[3] = {0,0,0};
@@ -54,6 +52,14 @@ void setup() {
   sei();
   digitalWrite(43, 1);  
 
+  while (analogRead(A2) < 700) {
+    delay(50);
+  }
+
+  oldG = knobG.read();
+  oldD = knobD.read();
+  previousMicros = micros();
+
   Serial.println("Temps,Consigne,VitG,VitD");
 }
 
@@ -65,8 +71,8 @@ void loop() {
     previousMicros = currentMicros;
 
     // 1. MESURE DES VITESSES BRUTES 
-    long newG = knobLeft.read();
-    long newD = knobRight.read();
+    long newG = knobG.read();
+    long newD = knobD.read();
     
     // Vitesse en tr/min = (delta_tics / resolution) / (temps_en_minutes)
     float vitG_brute = ((newG - oldG) / N_IMP) / (TE_US / 60000000.0);
