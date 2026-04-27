@@ -84,11 +84,9 @@ void loop() {
         
         v1 = v2;
         v2 = v3;
-        v3 = v4;
-        v4 = v5;
-        v5 = tr_min_R;
+        v3 = tr_min_R;
 
-        float vitesse_filtree = (v1 + v2 + v3 + v4 + v5) / 5.0;
+        float vitesse_filtree = (v1 + v2 + v3 ) / 3.0;
         // Affichage de la vitesse par rapport au temps
         Serial.print(t);
         Serial.print(",");
