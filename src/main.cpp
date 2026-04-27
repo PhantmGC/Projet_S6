@@ -2,6 +2,7 @@
 #include <Encoder.h>
 
 Encoder knobRight(19, 27);
+Encoder knobLeft(18, 29);
 
 #define Thash 800
 #define Stop 400
