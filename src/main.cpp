@@ -63,7 +63,7 @@ void loop() {
   if (currentMicros - previousMicros >= TE_US) {
     previousMicros = currentMicros;
 
-    // --- 1. MESURE DES VITESSES BRUTES ---
+    // 1. MESURE DES VITESSES BRUTES 
     long newG = knobG.read();
     long newD = knobD.read();
     
