@@ -18,8 +18,8 @@ Encoder knobRight(19, 27);
 long previousMicros = 0;
 
 // Paramètres de l'asservissement
-float Kp = 1.2; // A adapter
-float Ki = 15.0; // A adapter
+float Kp = 0.0162; 
+float Ki = 0.404;
 float consigne_vitesse = 150.0; // En tr/min 
 float somme_erreur = 0;
 
@@ -59,32 +59,47 @@ void loop() {
   long currentMicros = micros();
   long t = millis() - debutEchelon; // temps écoule depuis le debut du test
 
-  switch (cas) {
-    case 0: // Attente du signal de départ (Joystick)
-      if (Value_JX >= 700) {
-        debutEchelon = millis(); 
-        cas = 1;
-      }
-      break;
+ long currentMicros = micros();
+  
+  // On respecte la période d'échantillonnage TE_US (2000µs = 2ms)
+  if (currentMicros - previousMicros >= TE_US) {
+    previousMicros = currentMicros;
 
-    case 1:
-      if (t < 2000) {
-        MoteurGD(400, 400); // 0V à 5V
-      } 
-      else if (t < 8000) {
-        MoteurGD(400, 0); // echelon à 5V
-      } 
-      else {
-        StopMoteurGD; // arret
-        cas = 2; 
-      }
+    // 1. MESURE de la vitesse actuelle (vitesse_filtree déjà calculée dans votre code)
+    long newRight = knobRight.read();
+    float deltaP_R = newRight - oldRight;
+    oldRight = newRight;
+    float v_reelle = (deltaP_R / N_IMP) / (TE_US / 60000000.0);
+    
+    // Application du filtre (votre moyenne glissante)
+    v1=v2; v2=v3; v3=v_reelle;
+    float vitesse_mesuree = (v1+v2+v3)/5.0;
 
-      if (currentMicros - previousMicros >= TE_US) {
-        long newRight = knobRight.read();
-        long deltaP_R = newRight - oldRight;
+    // 2. CALCUL de l'erreur
+    float erreur = consigne_vitesse - vitesse_mesuree;
 
-        // Calcul vitesse en tr/min
-        float tr_min_R = (deltaP_R / N_IMP) / (TE_US / 60000000.0);
+    // 3. CALCUL de l'action Intégrale (avec gestion anti-windup simplifiée)
+    somme_erreur += erreur * (TE_US / 1000000.0);
+
+    // 4. CALCUL de la commande (Sortie du PI)
+    // On ajoute 400 car votre moteur s'arrête à 400 (offset)
+    // Attention au signe de Kp selon le sens de rotation voulu
+    float u = 400 - (Kp * erreur + Ki * somme_erreur);
+
+    // 5. SATURATION de la commande (Sécurité)
+    if (u > 800) u = 800;
+    if (u < 0)   u = 0;
+    
+    commande = u;
+
+    // 6. APPLICATION aux moteurs
+    MoteurD(commande); 
+    
+    // Debug
+    Serial.print(consigne_vitesse);
+    Serial.print(",");
+    Serial.println(vitesse_mesuree);
+  }
         
         v1 = v2;
         v2 = v3;
