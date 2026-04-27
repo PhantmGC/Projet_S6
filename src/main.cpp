@@ -18,8 +18,6 @@ Encoder knobD(19, 27);
 long previousMicros = 0;
 
 // Paramètres de l'asservissement
-float Kp = 0.0162; 
-float Ki = 0.404;
 float Kp_G = 0.0113, Ki_G = 0.452; // Moteur Gauche
 float Kp_D = 0.0162, Ki_D = 0.404; // Moteur Droit
 float consigne = 150.0;        // tr/min
