@@ -17,6 +17,12 @@ Encoder knobRight(19, 27);
 #define N_IMP 1204.0 // Nombre d'incréments par tour
 long previousMicros = 0;
 
+// Paramètres de l'asservissement
+float Kp = 1.2; // A adapter
+float Ki = 15.0; // A adapter
+float consigne_vitesse = 150.0; // En tr/min 
+float somme_erreur = 0;
+
 long oldRight = 0;
 long debutEchelon = 0;
 int cas = 0;
@@ -24,8 +30,6 @@ int cas = 0;
 float v1 = 0.0;
 float v2 = 0.0;
 float v3 = 0.0;
-float v4 = 0.0;
-float v5 = 0.0;
 
 void initMoteurs() {
   DDRL = 0x18 ;
