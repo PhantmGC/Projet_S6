@@ -64,52 +64,41 @@ void setup() {
 void loop() {
   long currentMicros = micros();
 
-  // Boucle d'échantillonnage à 2ms (500Hz)
   if (currentMicros - previousMicros >= TE_US) {
     previousMicros = currentMicros;
 
-    // 1. MESURE DES VITESSES BRUTES 
     long newG = knobG.read();
     long newD = knobD.read();
     
-    // Vitesse en tr/min = (delta_tics / resolution) / (temps_en_minutes)
     float vitG_brute = ((newG - oldG) / N_IMP) / (TE_US / 60000000.0);
     float vitD_brute = ((newD - oldD) / N_IMP) / (TE_US / 60000000.0);
     
     oldG = newG;
     oldD = newD;
 
-    //  2. FILTRAGE (Moyenne glissante 3 points)
-    // Moteur Gauche
+    // MG
     bufG[0] = bufG[1]; bufG[1] = bufG[2]; bufG[2] = vitG_brute;
     float vitG_filtree = (bufG[0] + bufG[1] + bufG[2]) / 3.0;
 
-    // Moteur Droit
+    // MD
     bufD[0] = bufD[1]; bufD[1] = bufD[2]; bufD[2] = vitD_brute;
     float vitD_filtree = (bufD[0] + bufD[1] + bufD[2]) / 3.0;
 
-    //  3. CALCUL DES ERREURS
     float errG = consigne - vitG_filtree;
     float errD = consigne - vitD_filtree;
 
-    // 4. ACTIONS INTÉGRALES (avec dt = TE_US en secondes)
     somme_errG += errG * (TE_US / 1000000.0);
     somme_errD += errD * (TE_US / 1000000.0);
 
-    // 5. CALCUL DES COMMANDES PI 
-    // Rappel : 400 est l'arrêt. Le sens dépend du câblage (+ ou -)
     float uG = Stop - (Kp_G * errG + Ki_G * somme_errG);
     float uD = Stop - (Kp_D * errD + Ki_D * somme_errD);
 
-    // 6. SATURATIONS (Sécurité 0-800) 
     if (uG > 800) uG = 800; if (uG < 0) uG = 0;
     if (uD > 800) uD = 800; if (uD < 0) uD = 0;
 
-    // 7. ENVOI AUX MOTEURS
     MoteurG((int)uG);
     MoteurD((int)uD);
 
-    // --- DEBUG SÉRIE ---
     Serial.print(millis()); Serial.print(",");
     Serial.print(consigne); Serial.print(",");
     Serial.print(vitG_filtree); Serial.print(",");
