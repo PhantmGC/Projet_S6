@@ -24,7 +24,7 @@ float consigne = 150.0;        // tr/min
 
 //  Variables de calcul 
 long oldG = 0, oldD = 0;
-float somme_errG = 0, somme_errD = 0;
+float Ci_G = 0, Ci_D = 0; 
 
 // Buffers pour filtre moyenne glissante (3 points)
 float bufG[3] = {0,0,0};
@@ -61,48 +61,69 @@ void setup() {
   Serial.println("Temps,Consigne,VitG,VitD");
 }
 
+
 void loop() {
   long currentMicros = micros();
 
   if (currentMicros - previousMicros >= TE_US) {
+    float Te = TE_US / 1000000.0; // Période en secondes (0.002)
     previousMicros = currentMicros;
 
+    // Mesure
     long newG = knobG.read();
     long newD = knobD.read();
-    
-    float vitG_brute = ((newG - oldG) / N_IMP) / (TE_US / 60000000.0);
-    float vitD_brute = ((newD - oldD) / N_IMP) / (TE_US / 60000000.0);
-    
-    oldG = newG;
-    oldD = newD;
+    float vitG_brute = ((newG - oldG) / N_IMP) / (Te / 60.0);
+    float vitD_brute = ((newD - oldD) / N_IMP) / (Te / 60.0);
+    oldG = newG; oldD = newD;
 
-    // MG
     bufG[0] = bufG[1]; bufG[1] = bufG[2]; bufG[2] = vitG_brute;
     float vitG_filtree = (bufG[0] + bufG[1] + bufG[2]) / 3.0;
 
-    // MD
     bufD[0] = bufD[1]; bufD[1] = bufD[2]; bufD[2] = vitD_brute;
     float vitD_filtree = (bufD[0] + bufD[1] + bufD[2]) / 3.0;
 
+    // Erreur
     float errG = consigne - vitG_filtree;
     float errD = consigne - vitD_filtree;
 
-    somme_errG += errG * (TE_US / 1000000.0);
-    somme_errD += errD * (TE_US / 1000000.0);
+      // Correcteur PI
+    // Moteur Gauche
+    float Cp_G = Kp_G * errG;
+    Ci_G = Ci_G + (Ki_G * Te * errG);
+    
+    // Moteur Droit
+    float Cp_D = Kp_D * errD;
+    Ci_D = Ci_D + (Ki_D * Te * errD);
 
-    float uG = Stop - (Kp_G * errG + Ki_G * somme_errG);
-    float uD = Stop - (Kp_D * errD + Ki_D * somme_errD);
+    // Nouvelle vitesse
+    float uG = Stop - (Cp_G + Ci_G);
+    float uD = Stop - (Cp_D + Ci_D);
 
-    if (uG > 800) uG = 800; if (uG < 0) uG = 0;
-    if (uD > 800) uD = 800; if (uD < 0) uD = 0;
+    // Saturation
+    if (uG > 800) { 
+      uG = 800;
+      Ci_G -= (Ki_G * Te * errG); 
+    } 
+    if (uG < 0) {
+      uG = 0;
+      Ci_G -= (Ki_G * Te * errG);
+    }
+    
+    if (uD > 800) {
+      uD = 800;
+      Ci_D -= (Ki_D * Te * errD); 
+    }
+    if (uD < 0) {
+      uD = 0;
+      Ci_D -= (Ki_D * Te * errD);
+    }
 
-    MoteurG((int)uG);
-    MoteurD((int)uD);
+    // Commande
+    MoteurGD((int)uG,(int)uD);
 
     Serial.print(millis()); Serial.print(",");
     Serial.print(consigne); Serial.print(",");
     Serial.print(vitG_filtree); Serial.print(",");
     Serial.println(vitD_filtree);
   }
-        
 }
