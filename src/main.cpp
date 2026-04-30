@@ -31,9 +31,6 @@ float Ci_G = 0, Ci_D = 0;
 float bG0=0, bG1=0, bG2=0;
 float bD0=0, bD1=0, bD2=0;
 
-// Variables pour la gestion d'état de l'écran (éviter les écritures inutiles)
-bool estEnErreur = false;
-
 void initMoteurs() {
   DDRL |= 0x18;
   DDRB |= 0x80;
