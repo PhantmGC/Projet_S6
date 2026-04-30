@@ -1,6 +1,6 @@
 #include <Encoder.h>
 
-Encoder knobG(18, 26);
+Encoder knobG(18, 29);
 Encoder knobD(19, 27);
 
 #define Thash 800
@@ -17,10 +17,10 @@ Encoder knobD(19, 27);
 #define N_IMP 1204.0 // Nombre d'incréments par tour
 long previousMicros = 0;
 
-// Paramètres de l'asservissement
+// Paramètres de l'asservissement (Coefficients pour sortie en Volts)
 float Kp_G = 0.0113, Ki_G = 0.452; // Moteur Gauche
 float Kp_D = 0.0162, Ki_D = 0.404; // Moteur Droit
-float consigne = 150.0;        // tr/min
+float consigne = 150.0;            // tr/min
 
 //  Variables de calcul 
 long oldG = 0, oldD = 0;
@@ -86,37 +86,26 @@ void loop() {
     float errG = consigne - vitG_filtree;
     float errD = consigne - vitD_filtree;
 
-      // Correcteur PI
+    // Correcteur PI (Calcul de la tension de -7V à 7V)
     // Moteur Gauche
     float Cp_G = Kp_G * errG;
     Ci_G = Ci_G + (Ki_G * Te * errG);
+    float TensionG = Cp_G + Ci_G;
     
     // Moteur Droit
     float Cp_D = Kp_D * errD;
     Ci_D = Ci_D + (Ki_D * Te * errD);
+    float TensionD = Cp_D + Ci_D;
 
-    // Nouvelle vitesse
-    float uG = Stop - (Cp_G + Ci_G);
-    float uD = Stop - (Cp_D + Ci_D);
+    // Produit en croix pour convertir la commande
+    float uG = Stop - (TensionG * (400.0 / 7.0));
+    float uD = Stop - (TensionD * (400.0 / 7.0));
 
     // Saturation
-    if (uG > 800) { 
-      uG = 800;
-      Ci_G -= (Ki_G * Te * errG); 
-    } 
-    if (uG < 0) {
-      uG = 0;
-      Ci_G -= (Ki_G * Te * errG);
-    }
-    
-    if (uD > 800) {
-      uD = 800;
-      Ci_D -= (Ki_D * Te * errD); 
-    }
-    if (uD < 0) {
-      uD = 0;
-      Ci_D -= (Ki_D * Te * errD);
-    }
+    if (uG > 800) { uG = 800; Ci_G -= (Ki_G * Te * errG); } 
+    if (uG < 0)   { uG = 0;   Ci_G -= (Ki_G * Te * errG); }
+    if (uD > 800) { uD = 800; Ci_D -= (Ki_D * Te * errD); } 
+    if (uD < 0)   { uD = 0;   Ci_D -= (Ki_D * Te * errD); }
 
     // Commande
     MoteurGD((int)uG,(int)uD);
