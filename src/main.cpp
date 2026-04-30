@@ -1,6 +1,6 @@
 #include <Encoder.h>
 
-Encoder knobG(18, 26);
+Encoder knobG(18, 29);
 Encoder knobD(19, 27);
 
 #define Thash 800
@@ -18,8 +18,8 @@ Encoder knobD(19, 27);
 long previousMicros = 0;
 
 // Paramètres de l'asservissement
-float Kp_G = 0.0113, Ki_G = 0.452; // Moteur Gauche
-float Kp_D = 0.0162, Ki_D = 0.404; // Moteur Droit
+float Kp_G = 0.0113*58, Ki_G = 0.452*58; // Moteur Gauche *58 pour la conversion de la commande
+float Kp_D = 0.0162*58, Ki_D = 0.404*58; // Moteur Droit *58 pour la conversion de la commande
 float consigne = 150.0;        // tr/min
 
 //  Variables de calcul 
