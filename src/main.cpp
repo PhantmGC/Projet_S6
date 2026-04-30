@@ -27,8 +27,6 @@ long oldG = 0, oldD = 0;
 float somme_errG = 0, somme_errD = 0;
 
 // Buffers pour filtre moyenne glissante (3 points)
-float bufG[3] = {0,0,0};
-float bufD[3] = {0,0,0};
 float v1_D = 0.0;
 float v2_D = 0.0;
 float v3-D = 0.0;
@@ -82,13 +80,17 @@ void loop() {
     oldG = newG;
     oldD = newD;
 
-    // MG
-    bufG[0] = bufG[1]; bufG[1] = bufG[2]; bufG[2] = vitG_brute;
-    float vitG_filtree = (bufG[0] + bufG[1] + bufG[2]) / 3.0;
-
     // MD
-    bufD[0] = bufD[1]; bufD[1] = bufD[2]; bufD[2] = vitD_brute;
-    float vitD_filtree = (bufD[0] + bufD[1] + bufD[2]) / 3.0;
+    v1_D = v2_D;
+    v2_D = v3_D;
+    v3_D = vitD_brute;
+    float vitD_filtree = (v1 + v2 + v3) / 3.0;
+
+    // MG
+    v1_G = v2_G;
+    v2_G = v3_G;
+    v3_G = vitG_brute;
+    float vitG_filtree = (v1 + v2 + v3) / 3.0;
 
     float errG = consigne - vitG_filtree;
     float errD = consigne - vitD_filtree;
