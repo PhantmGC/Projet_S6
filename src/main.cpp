@@ -12,7 +12,7 @@ Encoder knobD(19, 27);
 #define StopMoteurGD MoteurGD(Stop,Stop)
 
 #define TE_US 2000.0 
-#define N_IMP 1204.0 
+#define N_IMP 1200.0 
 long previousMicros = 0;
 
 // Constantes pré-calculées
@@ -24,7 +24,7 @@ const float vitMax = 180.0;
 
 float Kp_G = 0.0113, Ki_G = 0.452; 
 float Kp_D = 0.0162, Ki_D = 0.404;
-float consigne_pos = 1204.0 * 30.0;
+float consigne_pos = 1200.0 * 30.0;
 
 long oldG = 0, oldD = 0;
 float Ci_G = 0, Ci_D = 0; 
