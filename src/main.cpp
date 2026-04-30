@@ -1,118 +1,114 @@
 #include <Encoder.h>
+#include <Wire.h>
 
 Encoder knobG(18, 29);
 Encoder knobD(19, 27);
 
 #define Thash 800
 #define Stop 400
-#define Vmax Thash
-#define LedToggle digitalWrite(13, !digitalRead(13))
 #define MoteurG(Vg) OCR5A=Vg
 #define MoteurD(Vd) OCR5B=Vd
 #define MoteurGD(Vg,Vd) MoteurG(Vg);MoteurD(Vd)
 #define StopMoteurGD MoteurGD(Stop,Stop)
 
-// Paramètres de mesure
-#define TE_US 2000.0 // TE
-#define N_IMP 1204.0 // Nombre d'incréments par tour
+#define TE_US 2000.0 
+#define N_IMP 1204.0 
 long previousMicros = 0;
 
-// Paramètres de l'asservissement (Coefficients pour sortie en Volts)
-float Kp_G = 0.0113, Ki_G = 0.452; // Moteur Gauche
-float Kp_D = 0.0162, Ki_D = 0.404; // Moteur Droit
-float consigne = 150.0;            // tr/min
+// Constantes pré-calculées
+const float Te = TE_US / 1000000.0;
+const float inv_N_IMP_60_Te = (60.0 / N_IMP) / Te;
+const float ratio_tension_reg = 400.0 / 7.0;
+const float Kp_pos_unit = (5.0 / N_IMP) * 60.0;
+const float vitMax = 180.0;
 
-//  Variables de calcul 
+float Kp_G = 0.0113, Ki_G = 0.452; 
+float Kp_D = 0.0162, Ki_D = 0.404;
+float consigne_pos = 1204.0 * 30.0;
+
 long oldG = 0, oldD = 0;
 float Ci_G = 0, Ci_D = 0; 
+float bG0=0, bG1=0, bG2=0;
+float bD0=0, bD1=0, bD2=0;
 
-// Buffers pour filtre moyenne glissante (3 points)
-float bufG[3] = {0,0,0};
-float bufD[3] = {0,0,0};
+// Variables pour la gestion d'état de l'écran (éviter les écritures inutiles)
+bool estEnErreur = false;
 
 void initMoteurs() {
-  DDRL = 0x18 ;
-  DDRB = 0x80 ;
+  DDRL |= 0x18;
+  DDRB |= 0x80;
   TCCR5A = (1 << COM5A1) + (1 << COM5B1);
   TCCR5B = (1 << ICNC5) + (1 << WGM53) + (1 << CS50);
   ICR5 = Thash;
   StopMoteurGD;
-  TIMSK5 = 1 << TOIE5;
 }
-
-ISR (TIMER5_OVF_vect) { LedToggle; }
 
 void setup() {
   Serial.begin(115200);
   pinMode(43, OUTPUT);
-  digitalWrite(43, 0);
   initMoteurs();
-  sei();
-  digitalWrite(43, 1);  
+  pinMode(13, OUTPUT);
 
-  while (analogRead(A2) < 700) {
-    delay(50);
-  }
-
+  // Attente Joystick pour démarrer
+  while (analogRead(A2) < 700) { delay(10); }
+  
   oldG = knobG.read();
   oldD = knobD.read();
   previousMicros = micros();
-
-  Serial.println("Temps,Consigne,VitG,VitD");
+  digitalWrite(43, 1);
 }
-
 
 void loop() {
   long currentMicros = micros();
 
-  if (currentMicros - previousMicros >= TE_US) {
-    float Te = TE_US / 1000000.0; // Période en secondes (0.002)
-    previousMicros = currentMicros;
-
-    // Mesure
+  if (currentMicros - previousMicros >= (long)TE_US) {
+    // Calcul des vitesses
     long newG = knobG.read();
     long newD = knobD.read();
-    float vitG_brute = ((newG - oldG) / N_IMP) / (Te / 60.0);
-    float vitD_brute = ((newD - oldD) / N_IMP) / (Te / 60.0);
+    float vG = (float)(newG - oldG) * inv_N_IMP_60_Te;
+    float vD = (float)(newD - oldD) * inv_N_IMP_60_Te;
     oldG = newG; oldD = newD;
 
-    bufG[0] = bufG[1]; bufG[1] = bufG[2]; bufG[2] = vitG_brute;
-    float vitG_filtree = (bufG[0] + bufG[1] + bufG[2]) / 3.0;
+    // Filtrage rapide
+    bG0 = bG1; bG1 = bG2; bG2 = vG;
+    float vGf = (bG0 + bG1 + bG2) * 0.333333;
+    bD0 = bD1; bD1 = bD2; bD2 = vD;
+    float vDf = (bD0 + bD1 + bD2) * 0.333333;
 
-    bufD[0] = bufD[1]; bufD[1] = bufD[2]; bufD[2] = vitD_brute;
-    float vitD_filtree = (bufD[0] + bufD[1] + bufD[2]) / 3.0;
+    // Asservissement Position
+    float cVG = (consigne_pos - (float)newG) * Kp_pos_unit;
+    float cVD = (consigne_pos - (float)newD) * Kp_pos_unit;
+    if (cVG > vitMax) cVG = vitMax; else if (cVG < -vitMax) cVG = -vitMax;
+    if (cVD > vitMax) cVD = vitMax; else if (cVD < -vitMax) cVD = -vitMax;
 
-    // Erreur
-    float errG = consigne - vitG_filtree;
-    float errD = consigne - vitD_filtree;
+    // Asservissement Vitesse
+    float eG = cVG - vGf;
+    float eD = cVD - vDf;
+    float ki_step_G = Ki_G * Te * eG;
+    float ki_step_D = Ki_D * Te * eD;
+    Ci_G += ki_step_G;
+    Ci_D += ki_step_D;
 
-    // Correcteur PI (Calcul de la tension de -7V à 7V)
-    // Moteur Gauche
-    float Cp_G = Kp_G * errG;
-    Ci_G = Ci_G + (Ki_G * Te * errG);
-    float TensionG = Cp_G + Ci_G;
-    
-    // Moteur Droit
-    float Cp_D = Kp_D * errD;
-    Ci_D = Ci_D + (Ki_D * Te * errD);
-    float TensionD = Cp_D + Ci_D;
+    // Commande moteur
+    float uG = Stop - (((Kp_G * eG) + Ci_G) * ratio_tension_reg);
+    float uD = Stop - (((Kp_D * eD) + Ci_D) * ratio_tension_reg);
 
-    // Produit en croix pour convertir la commande
-    float uG = Stop - (TensionG * (400.0 / 7.0));
-    float uD = Stop - (TensionD * (400.0 / 7.0));
+    // Anti-windup
+    if (uG > 800.0) { uG = 800.0; Ci_G -= ki_step_G; } 
+    else if (uG < 0.0) { uG = 0.0; Ci_G -= ki_step_G; }
+    if (uD > 800.0) { uD = 800.0; Ci_D -= ki_step_D; } 
+    else if (uD < 0.0) { uD = 0.0; Ci_D -= ki_step_D; }
 
-    // Saturation
-    if (uG > 800) { uG = 800; Ci_G -= (Ki_G * Te * errG); } 
-    if (uG < 0)   { uG = 0;   Ci_G -= (Ki_G * Te * errG); }
-    if (uD > 800) { uD = 800; Ci_D -= (Ki_D * Te * errD); } 
-    if (uD < 0)   { uD = 0;   Ci_D -= (Ki_D * Te * errD); }
+    MoteurGD((int)uG, (int)uD);
 
-    // Commande
-    MoteurGD((int)uG,(int)uD);
+    // Watchdog
+    long calculTime = micros() - previousMicros;
+    if (calculTime > 2000) {
+      digitalWrite(13, HIGH);
+    } else {
+      digitalWrite(13, LOW);
+    }
 
-    Serial.print(millis()); Serial.print(",");
-    Serial.print(consigne); Serial.print(",");
-    Serial.print(vitG_filtree); Serial.print(",");
-    Serial.println(vitD_filtree);
+    previousMicros += (long)TE_US; 
   }
 }
