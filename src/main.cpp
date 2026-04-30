@@ -29,6 +29,12 @@ float somme_errG = 0, somme_errD = 0;
 // Buffers pour filtre moyenne glissante (3 points)
 float bufG[3] = {0,0,0};
 float bufD[3] = {0,0,0};
+float v1_D = 0.0;
+float v2_D = 0.0;
+float v3-D = 0.0;
+float v1_G = 0.0;
+float v2_G = 0.0;
+float v3_G = 0.0;
 
 void initMoteurs() {
   DDRL = 0x18 ;
