@@ -1,111 +1,135 @@
 #include <Encoder.h>
-#include <Wire.h>
 
 Encoder knobG(18, 29);
 Encoder knobD(19, 27);
 
+// --- Configuration Matérielle ---
 #define Thash 800
 #define Stop 400
+#define LedToggle digitalWrite(13, !digitalRead(13))
 #define MoteurG(Vg) OCR5A=Vg
 #define MoteurD(Vd) OCR5B=Vd
 #define MoteurGD(Vg,Vd) MoteurG(Vg);MoteurD(Vd)
 #define StopMoteurGD MoteurGD(Stop,Stop)
 
-#define TE_US 2000.0 
-#define N_IMP 1200.0 
-long previousMicros = 0;
+// --- Paramètres Temporels ---
+#define TE_VIT_US 2000.0   // Boucle interne (Vitesse) : 2ms
+#define TE_POS_US 10000.0  // Boucle externe (Position) : 10ms
+long prevMicrosVit = 0;
+long prevMicrosPos = 0;
 
-// Constantes pré-calculées
-const float Te = TE_US / 1000000.0;
-const float inv_N_IMP_60_Te = (60.0 / N_IMP) / Te;
-const float ratio_tension_reg = 400.0 / 7.0;
-const float Kp_pos_unit = (5.0 / N_IMP) * 60.0;
-const float vitMax = 180.0;
+// --- Paramètres Physiques ---
+#define N_IMP 1200.0 // Corrigé : 1200 pas par tour
 
+// --- Asservissement de VITESSE (Boucle interne) ---
 float Kp_G = 0.0113, Ki_G = 0.452; 
-float Kp_D = 0.0162, Ki_D = 0.404;
-float consigne_pos = 1200.0 * 30.0;
+float Kp_D = 0.0162, Ki_D = 0.404; 
+float Ci_G = 0, Ci_D = 0; // Termes intégraux
+float vitG_filtree = 0, vitD_filtree = 0;
+float bufG[3] = {0}, bufD[3] = {0};
+
+// --- Asservissement de POSITION (Boucle externe) ---
+// La sortie de cette boucle est la consigne de la boucle de vitesse
+float Kp_Pos = 0.3;         // Gain proportionnel position (à ajuster)
+float consigne_vitesse = 0; // Générée dynamiquement
+float consigne_pos_imp = 2400.0; // Exemple : Avancer de 2 tours (2 * 1200)
 
 long oldG = 0, oldD = 0;
-float Ci_G = 0, Ci_D = 0; 
-float bG0=0, bG1=0, bG2=0;
-float bD0=0, bD1=0, bD2=0;
 
 void initMoteurs() {
-  DDRL |= 0x18;
-  DDRB |= 0x80;
+  DDRL = 0x18 ;
+  DDRB = 0x80 ;
   TCCR5A = (1 << COM5A1) + (1 << COM5B1);
   TCCR5B = (1 << ICNC5) + (1 << WGM53) + (1 << CS50);
   ICR5 = Thash;
   StopMoteurGD;
+  TIMSK5 = 1 << TOIE5;
 }
 
-void setup() {
-  Serial.begin(115200);
-  pinMode(43, OUTPUT);
-  initMoteurs();
-  pinMode(13, OUTPUT);
+ISR (TIMER5_OVF_vect) { LedToggle; }
 
-  // Attente Joystick pour démarrer
-  while (analogRead(A2) < 700) { delay(10); }
-  
+void setup() {
+  pinMode(43, OUTPUT);
+  digitalWrite(43, 0);
+  initMoteurs();
+  sei();
+  digitalWrite(43, 1);  
+
+  while (analogRead(A2) < 700) { delay(50); }
+
   oldG = knobG.read();
   oldD = knobD.read();
-  previousMicros = micros();
-  digitalWrite(43, 1);
+  prevMicrosVit = micros();
+  prevMicrosPos = micros();
+
+  Serial.println("Temps,ConsignePos,PosActuelle,ConsigneVit,VitG");
 }
 
 void loop() {
   long currentMicros = micros();
 
-  if (currentMicros - previousMicros >= (long)TE_US) {
-    // Calcul des vitesses
+  // ==========================================================
+  // 1. BOUCLE EXTERNE : POSITION (Toutes les 10ms)
+  // ==========================================================
+  if (currentMicros - prevMicrosPos >= TE_POS_US) {
+    prevMicrosPos = currentMicros;
+
+    // Mesure de la position actuelle (moyenne des deux encodeurs)
+    long pos_actuelle = (knobG.read() + knobD.read()) / 2;
+
+    // Calcul de l'erreur de position
+    float err_pos = consigne_pos_imp - pos_actuelle;
+
+    // Calcul de la consigne de vitesse (Action Proportionnelle)
+    // L'intégrateur est déjà "naturellement" présent dans la mesure de position (1/p)
+    consigne_vitesse = err_pos * Kp_Pos;
+
+    // Saturation de la consigne de vitesse (en tr/min) pour protéger la mécanique
+    if (consigne_vitesse > 180.0)  consigne_vitesse = 180.0;
+    if (consigne_vitesse < -180.0) consigne_vitesse = -180.0;
+  }
+
+  // ==========================================================
+  // 2. BOUCLE INTERNE : VITESSE (Toutes les 2ms)
+  // ==========================================================
+  if (currentMicros - prevMicrosVit >= TE_VIT_US) {
+    float Te = TE_VIT_US / 1000000.0;
+    prevMicrosVit = currentMicros;
+
+    // Mesure de la vitesse
     long newG = knobG.read();
     long newD = knobD.read();
-    float vG = (float)(newG - oldG) * inv_N_IMP_60_Te;
-    float vD = (float)(newD - oldD) * inv_N_IMP_60_Te;
+    float vitG_brute = ((newG - oldG) / N_IMP) / (Te / 60.0);
+    float vitD_brute = ((newD - oldD) / N_IMP) / (Te / 60.0);
     oldG = newG; oldD = newD;
 
-    // Filtrage rapide
-    bG0 = bG1; bG1 = bG2; bG2 = vG;
-    float vGf = (bG0 + bG1 + bG2) * 0.333333;
-    bD0 = bD1; bD1 = bD2; bD2 = vD;
-    float vDf = (bD0 + bD1 + bD2) * 0.333333;
+    // Filtre moyenne glissante
+    bufG[0] = bufG[1]; bufG[1] = bufG[2]; bufG[2] = vitG_brute;
+    vitG_filtree = (bufG[0] + bufG[1] + bufG[2]) / 3.0;
+    bufD[0] = bufD[1]; bufD[1] = bufD[2]; bufD[2] = vitD_brute;
+    vitD_filtree = (bufD[0] + bufD[1] + bufD[2]) / 3.0;
 
-    // Asservissement Position
-    float cVG = (consigne_pos - (float)newG) * Kp_pos_unit;
-    float cVD = (consigne_pos - (float)newD) * Kp_pos_unit;
-    if (cVG > vitMax) cVG = vitMax; else if (cVG < -vitMax) cVG = -vitMax;
-    if (cVD > vitMax) cVD = vitMax; else if (cVD < -vitMax) cVD = -vitMax;
+    // Calcul de l'erreur de vitesse par rapport à la consigne dynamique
+    float errVitG = consigne_vitesse - vitG_filtree;
+    float errVitD = consigne_vitesse - vitD_filtree;
 
-    // Asservissement Vitesse
-    float eG = cVG - vGf;
-    float eD = cVD - vDf;
-    float ki_step_G = Ki_G * Te * eG;
-    float ki_step_D = Ki_D * Te * eD;
-    Ci_G += ki_step_G;
-    Ci_D += ki_step_D;
+    // Correcteur PI Vitesse
+    Ci_G += (Ki_G * Te * errVitG);
+    float TensionG = (Kp_G * errVitG) + Ci_G;
+    
+    Ci_D += (Ki_D * Te * errVitD);
+    float TensionD = (Kp_D * errVitD) + Ci_D;
 
-    // Commande moteur
-    float uG = Stop - (((Kp_G * eG) + Ci_G) * ratio_tension_reg);
-    float uD = Stop - (((Kp_D * eD) + Ci_D) * ratio_tension_reg);
+    // Conversion Tension (-7V/7V) -> PWM (0-800)
+    float uG = Stop - (TensionG * (400.0 / 7.0));
+    float uD = Stop - (TensionD * (400.0 / 7.0));
 
-    // Anti-windup
-    if (uG > 800.0) { uG = 800.0; Ci_G -= ki_step_G; } 
-    else if (uG < 0.0) { uG = 0.0; Ci_G -= ki_step_G; }
-    if (uD > 800.0) { uD = 800.0; Ci_D -= ki_step_D; } 
-    else if (uD < 0.0) { uD = 0.0; Ci_D -= ki_step_D; }
+    // Saturation et Anti-windup
+    if (uG > 800) { uG = 800; Ci_G -= (Ki_G * Te * errVitG); } 
+    if (uG < 0)   { uG = 0;   Ci_G -= (Ki_G * Te * errVitG); }
+    if (uD > 800) { uD = 800; Ci_D -= (Ki_D * Te * errVitD); } 
+    if (uD < 0)   { uD = 0;   Ci_D -= (Ki_D * Te * errVitD); }
 
     MoteurGD((int)uG, (int)uD);
-
-    // Watchdog
-    long calculTime = micros() - previousMicros;
-    if (calculTime > 2000) {
-      digitalWrite(13, HIGH);
-    } else {
-      digitalWrite(13, LOW);
-    }
-
-    previousMicros += (long)TE_US; 
   }
 }
