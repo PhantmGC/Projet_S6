@@ -62,7 +62,7 @@ float vitesse_rampe_TD = 0;
 #define TOLERANCE_TD 100L
 
 // --- Mode 2 : Suivi obstacle ---
-float Kp_Pos_SO          = 2.5;
+float Kp_Pos_SO          = 5.0;
 float consigne_pos_SO    = 1000000.0;
 float vitesse_max_SO     = 250.0;
 float cV_SO              = 0;
@@ -85,7 +85,7 @@ void afficherMenu() {
   lcd.print("> ");
   lcd.print(menuLabels[menuIndex]);
   lcd.setCursor(0, 1);
-  lcd.print("   Push to play");
+  lcd.print("  JY=OK JX=nav");
 }
 
 // ======================================================
@@ -112,9 +112,10 @@ void setup() {
 
   while (modeSelectionne == 0) {
     int jx = analogRead(A2);
+    int jy = analogRead(A3);
 
-    // Navigation : 999 > JX > 700 → mode suivant
-    if (jx > 700 && jx < 999) {
+    // Navigation : JX > 700 → mode suivant
+    if (jx > 700) {
       menuIndex = (menuIndex + 1) % 3;
       afficherMenu();
       delay(300);
@@ -126,8 +127,8 @@ void setup() {
       delay(300);
     }
 
-    // Validation : JX > 1000 → confirme le mode affiché
-    if (jx > 1000) {
+    // Validation : JY > 700 → confirme le mode affiché
+    if (jy > 700) {
       modeSelectionne = menuIndex + 1; // 1, 2 ou 3
       lcd.clear();
       lcd.setCursor(0, 0);

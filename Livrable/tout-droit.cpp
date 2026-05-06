@@ -26,10 +26,10 @@ float vitG_filtree = 0, vitD_filtree = 0;
 float bufG[3] = {0}, bufD[3] = {0};
 
 // --- Asservissement Position ---
-float Kp_Pos = 5.0; 
+float Kp_Pos = 2.5; 
 float consigne_vitesse = 0; 
 float consigne_pos_imp = 36000.0; // 1200 * 30
-float vitesse_max = 150.0;            
+float vitesse_max = 60.0;            
 #define TOLERANCE 100L
 
 // --- Rampe ---
