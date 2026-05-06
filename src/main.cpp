@@ -31,6 +31,14 @@ void initMoteurs() {
   StopMoteurGD;
 }
 
+// Courant Moteur
+#define PIN_COURANT_G A5
+#define PIN_COURANT_D A4
+#define SEUIL_COURANT_MAX_G 800
+#define SEUIL_COURANT_MAX_D 950
+
+int surchargeDetectee = 0;
+
 // ===================== MENU =====================
 // 0 = Menu, 1 = Tout droit, 2 = Suivi obstacle, 3 = Rotation 90°, 4 = Cercle
 int modeSelectionne = 0;
@@ -56,7 +64,7 @@ float consigne_vitesse = 0;
 // --- Mode 1 : Tout droit ---
 float Kp_Pos_TD      = 2.5;
 float consigne_pos   = 36000.0;
-float vitesse_max_TD = 60.0;
+float vitesse_max_TD = 250.0;
 float vitesse_rampe_TD = 0;
 #define INC_RAMPE    1.0
 #define TOLERANCE_TD 100L
@@ -77,11 +85,11 @@ float cV_G_R90 = 0, cV_D_R90 = 0;
 #define ACCEL_MAX 1.2
 
 // --- Mode 4 : Cercle ---
-float Rc                  = 200.0;   // Rayon cercle en mm
+float Rc                  = 125.0;   // Rayon cercle en mm  ← modifié
 float L                   = 130.0;   // Entraxe robot en mm
-float consigne_pos_cercle = 20925.0; // ~1 tour complet
-float CIBLE_G_C           = 0;       // Cible roue gauche (calculée au setup)
-float CIBLE_D_C           = 0;       // Cible roue droite (calculée au setup)
+float consigne_pos_cercle = (20950.0 / 500.0) * Rc; // ← formule proportionnelle au rayon
+float CIBLE_G_C           = 0;
+float CIBLE_D_C           = 0;
 float Kp_Pos_C            = 5.0;
 float vitesse_max_C       = 100.0;
 float vitesse_rampe_C     = 0;
@@ -162,6 +170,17 @@ void setup() {
 //          FONCTION COMMUNE : BOUCLE VITESSE PI
 // ======================================================
 void bouclePIVitesse(float cVG, float cVD) {
+
+  // //Verification SurIntensité
+  // int valG = analogRead(PIN_COURANT_G);
+  // int valD = analogRead(PIN_COURANT_D);
+
+  // if (valG > SEUIL_COURANT_MAX_G || valD > SEUIL_COURANT_MAX_D) {
+  //     surchargeDetectee = 1;
+  //     StopMoteurGD;
+  //     digitalWrite(43, 0); 
+  //     return; // On sort immédiatement de la fonction
+  // }
   const float Te = 0.002;
 
   long nG = knobG.read();
@@ -352,6 +371,19 @@ void loop_cercle() {
 //                     LOOP PRINCIPAL
 // ======================================================
 void loop() {
+  // // Vérification de sécurité prioritaire
+  // if (surchargeDetectee == 1) {
+  //   StopMoteurGD;
+  //   digitalWrite(43, 0);
+    
+  //   lcd.clear();
+  //   lcd.setRGB(255, 0, 0); // Écran Rouge
+  //   lcd.setCursor(0, 0);
+  //   lcd.print("SURCHARGE !");
+        
+  //   while(1); // Bloquage définitif du robot
+  // }
+
   switch (modeSelectionne) {
     case 1: loop_toutDroit();     break;
     case 2: loop_suiviObstacle(); break;
