@@ -20,7 +20,7 @@ void initMoteurs() {
 }
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
 
   pinMode(43, OUTPUT);
   digitalWrite(43, 1);
