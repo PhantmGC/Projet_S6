@@ -77,11 +77,11 @@ float cV_G_R90 = 0, cV_D_R90 = 0;
 #define ACCEL_MAX 1.2
 
 // --- Mode 4 : Cercle ---
-float Rc                  = 500.0;   // Rayon cercle en mm
+float Rc                  = 125.0;   // Rayon cercle en mm  ← modifié
 float L                   = 130.0;   // Entraxe robot en mm
-float consigne_pos_cercle = 20925.0; // ~1 tour complet
-float CIBLE_G_C           = 0;       // Cible roue gauche (calculée au setup)
-float CIBLE_D_C           = 0;       // Cible roue droite (calculée au setup)
+float consigne_pos_cercle = (20950.0 / 500.0) * Rc; // ← formule proportionnelle au rayon
+float CIBLE_G_C           = 0;
+float CIBLE_D_C           = 0;
 float Kp_Pos_C            = 5.0;
 float vitesse_max_C       = 100.0;
 float vitesse_rampe_C     = 0;
