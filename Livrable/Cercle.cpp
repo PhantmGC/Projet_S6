@@ -18,10 +18,12 @@ long prevMicrosPos = 0;
 #define N_IMP 1200.0 
 
 // --- Configuration du Cercle ---
-float Rc = 500.0;            // Rayon du cercle en mm
+// MODIFIEZ UNIQUEMENT LE RAYON CI-DESSOUS SELON VOS BESOINS :
+float Rc = 125.0;            // Rayon du cercle en mm
 float L = 130.0;             // Entraxe du robot en mm
-// Nouvelle consigne pour faire 1 tour complet (20000 tics)
-float consigne_pos_imp = 20925.0; 
+
+// Calcul automatique de la consigne pour 1 tour complet (360°)
+float consigne_pos_imp = (20950.0 / 500.0) * Rc; 
 
 // Cibles de tics calculées pour les deux roues
 float CIBLE_G = 0;
