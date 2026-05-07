@@ -13,6 +13,7 @@ Encoder knobD(19, 27);
 
 //CAPTEUR
 Ultrasonic ultrasonic1(12);
+Ultrasonic ultrasonic2(10);
 
 //MOTEURS
 #define Thash 800
@@ -61,6 +62,9 @@ float vitG_filtree = 0, vitD_filtree = 0;
 float bufG[3] = {0}, bufD[3] = {0};
 float consigne_vitesse = 0;
 
+// --- AJOUT VARIABLE MESURE ---
+float distInit_TD = 0;
+
 //Mode 1 : Tout droit
 float Kp_Pos_TD      = 2.5;
 float consigne_pos   = 36000.0;
@@ -102,7 +106,7 @@ float cV_G_C = 0, cV_D_C = 0;
 int lireDirectionJX() {
   int jx = analogRead(A2);
   if (jx > 700 && jx < 999) return  1;   // droite / haut
-  if (jx < 300)              return -1;   // gauche / bas
+  if (jx < 300)               return -1;   // gauche / bas
   return 0;
 }
 // Renvoie true si le joystick est enfoncé
@@ -110,7 +114,7 @@ bool joystickClick() {
   return (analogRead(A2) > 1000);
 }
 
-//                   AFFICHAGE MENU
+//                 AFFICHAGE MENU
 void afficherMenu() {
   lcd.clear();
   lcd.setCursor(0, 0);
@@ -120,7 +124,7 @@ void afficherMenu() {
   lcd.print("   Push to play");
 }
 
-//        ÉCRAN DE RÉGLAGE : VITESSE (Mode 1)
+//         ÉCRAN DE RÉGLAGE : VITESSE (Mode 1)
 //Plage 50–250, pas 25
 
 void reglageVitesseToutDroit() {
@@ -164,8 +168,8 @@ void reglageVitesseToutDroit() {
   }
 }
 
-//        ÉCRAN DE RÉGLAGE : RAYON (Mode 4)
-//        Plage 100–1000 mm, pas 50
+//         ÉCRAN DE RÉGLAGE : RAYON (Mode 4)
+//         Plage 100–1000 mm, pas 50
 void reglageRayonCercle() {
   lcd.clear();
   lcd.setCursor(0, 0);
@@ -257,10 +261,10 @@ void setup() {
       lcd.clear();
 
       if (modeSelectionne == 1) {
-
         reglageVitesseToutDroit();
+        // --- MESURE AU DEBUT DU MODE TOUT DROIT ---
+        distInit_TD = ultrasonic2.MeasureInCentimeters();
       } else if (modeSelectionne == 4) {
-
         reglageRayonCercle();
       }
     }
@@ -274,7 +278,7 @@ void setup() {
   prevMicrosPos = micros();
 }
 
-//          FONCTION COMMUNE : BOUCLE VITESSE PI
+//           FONCTION COMMUNE : BOUCLE VITESSE PI
 void bouclePIVitesse(float cVG, float cVD) {
 
   // //Verification SurIntensité
@@ -282,10 +286,10 @@ void bouclePIVitesse(float cVG, float cVD) {
   // int valD = analogRead(PIN_COURANT_D);
 
   // if (valG > SEUIL_COURANT_MAX_G || valD > SEUIL_COURANT_MAX_D) {
-  //     surchargeDetectee = 1;
-  //     StopMoteurGD;
-  //     digitalWrite(43, 0); 
-  //     return;
+  //      surchargeDetectee = 1;
+  //      StopMoteurGD;
+  //      digitalWrite(43, 0); 
+  //      return;
   // }
   const float Te = 0.002;
 
@@ -318,7 +322,7 @@ void bouclePIVitesse(float cVG, float cVD) {
   MoteurGD((int)uG, (int)uD);
 }
 
-//               MODE 1 : TOUT DROIT
+//                MODE 1 : TOUT DROIT
 
 void loop_toutDroit() {
   long currentMicros = micros();
@@ -332,8 +336,15 @@ void loop_toutDroit() {
     if (abs((long)consigne_pos - pG) < TOLERANCE_TD &&
         abs((long)consigne_pos - pD) < TOLERANCE_TD) {
       StopMoteurGD;
+      // --- CALCUL DIFFERENCE ET AFFICHAGE ---
+      float distFinale = ultrasonic2.MeasureInCentimeters();
+      float diff = distInit_TD - distFinale;
       lcd.clear();
       lcd.setCursor(0, 0);
+      lcd.print("Diff: ");
+      lcd.print(diff);
+      lcd.print(" cm");
+      lcd.setCursor(0, 1);
       lcd.print("Arrive ! Stop.");
       while (1);
     }
@@ -351,7 +362,7 @@ void loop_toutDroit() {
   }
 }
 
-//             MODE 2 : SUIVI D'OBSTACLE
+//               MODE 2 : SUIVI D'OBSTACLE
 
 void loop_suiviObstacle() {
   long currentMicros = micros();
@@ -380,7 +391,7 @@ void loop_suiviObstacle() {
   }
 }
 
-//              MODE 3 : ROTATION 90°
+//               MODE 3 : ROTATION 90°
 
 void loop_rotation90() {
   long currentMicros = micros();
@@ -405,8 +416,13 @@ void loop_rotation90() {
     float vG_souh = ( CIBLE_90 - (float)pG) * Kp_Pos_R90;
     float vD_souh = (-CIBLE_90 - (float)pD) * Kp_Pos_R90;
 
-    cV_G_R90 = constrain(vG_souh, -vitesse_rampe_R90, vitesse_rampe_R90);
-    cV_D_R90 = constrain(vD_souh, -vitesse_rampe_R90, vitesse_rampe_R90);
+    cV_G_R90 = vG_souh;
+    if (cV_G_R90 >  vitesse_rampe_R90) cV_G_R90 =  vitesse_rampe_R90;
+    if (cV_G_R90 < -vitesse_rampe_R90) cV_G_R90 = -vitesse_rampe_R90;
+
+    cV_D_R90 = vD_souh;
+    if (cV_D_R90 >  vitesse_rampe_R90) cV_D_R90 =  vitesse_rampe_R90;
+    if (cV_D_R90 < -vitesse_rampe_R90) cV_D_R90 = -vitesse_rampe_R90;
   }
 
   if (micros() - prevMicrosVit >= TE_VIT_US) {
@@ -415,7 +431,7 @@ void loop_rotation90() {
   }
 }
 
-//              MODE 4 : CERCLE
+//               MODE 4 : CERCLE
 
 void loop_cercle() {
   long currentMicros = micros();
