@@ -41,9 +41,8 @@ void initMoteurs() {
 int surchargeDetectee = 0;
 
 //MENU LCD
-// 0 = Menu, 1 = Tout droit, 2 = Suivi obstacle, 3 = Rotation 90°, 4 = Cercle
 int modeSelectionne = 0;
-int menuIndex = 0; // 0, 1, 2, 3
+int menuIndex = 0;
 const char* menuLabels[] = { "1.Tout droit", "2.Suivi obst.", "3.Rotation 90", "4.Cercle" };
 
 //CONSTANTES COMMUNES
@@ -484,7 +483,7 @@ void loop_cercle() {
 }
 
 void loop() {
-  // // Vérification de sécurité prioritaire
+  // // Vérification de surcharge
   // if (surchargeDetectee == 1) {
   //   StopMoteurGD;
   //   digitalWrite(43, 0);

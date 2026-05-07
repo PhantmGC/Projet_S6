@@ -3,18 +3,19 @@
 #include "Ultrasonic.h"
 #include "rgb_lcd.h"
 
-// ===================== LCD =====================
+//LCD
 rgb_lcd lcd;
 const int colorR = 255, colorG = 255, colorB = 255;
 
-// ===================== ENCODEURS =====================
+//ENCODEURS
 Encoder knobG(18, 29);
 Encoder knobD(19, 27);
 
-// ===================== SONAR =====================
+//CAPTEUR
 Ultrasonic ultrasonic1(12);
+Ultrasonic ultrasonic2(10);
 
-// ===================== MOTEURS =====================
+//MOTEURS
 #define Thash 800
 #define Stop 400
 #define MoteurG(Vg)       OCR5A = Vg
@@ -39,18 +40,17 @@ void initMoteurs() {
 
 int surchargeDetectee = 0;
 
-// ===================== MENU =====================
-// 0 = Menu, 1 = Tout droit, 2 = Suivi obstacle, 3 = Rotation 90°, 4 = Cercle
+//MENU LCD
 int modeSelectionne = 0;
-int menuIndex = 0; // 0, 1, 2, 3
+int menuIndex = 0;
 const char* menuLabels[] = { "1.Tout droit", "2.Suivi obst.", "3.Rotation 90", "4.Cercle" };
 
-// ===================== CONSTANTES COMMUNES =====================
+//CONSTANTES COMMUNES
 #define TE_VIT_US  2000.0
 #define TE_POS_US 10000.0
 #define N_IMP     1200.0
 
-// ===================== VARIABLES COMMUNES =====================
+//VARIABLES COMMUNES
 long prevMicrosVit = 0, prevMicrosPos = 0;
 long oldG = 0, oldD = 0;
 
@@ -61,21 +61,24 @@ float vitG_filtree = 0, vitD_filtree = 0;
 float bufG[3] = {0}, bufD[3] = {0};
 float consigne_vitesse = 0;
 
-// --- Mode 1 : Tout droit ---
+// --- AJOUT VARIABLE MESURE ---
+float distInit_TD = 0;
+
+//Mode 1 : Tout droit
 float Kp_Pos_TD      = 2.5;
 float consigne_pos   = 36000.0;
-float vitesse_max_TD = 150.0;   // valeur par défaut (modifiable via joystick)
+float vitesse_max_TD = 150.0;
 float vitesse_rampe_TD = 0;
 #define INC_RAMPE    1.0
 #define TOLERANCE_TD 100L
 
-// --- Mode 2 : Suivi obstacle ---
+//Mode 2 : Suivi obstacle
 float Kp_Pos_SO       = 2.5;
 float consigne_pos_SO = 1000000.0;
 float vitesse_max_SO  = 250.0;
 float cV_SO           = 0;
 
-// --- Mode 3 : Rotation 90° ---
+//Mode 3 : Rotation 90°
 float Kp_Pos_R90      = 6.0;
 float CIBLE_90        = 605.0;
 float vitesse_max_R90 = 100.0;
@@ -84,10 +87,10 @@ float cV_G_R90 = 0, cV_D_R90 = 0;
 #define TOLERANCE_R90 50L
 #define ACCEL_MAX 1.2
 
-// --- Mode 4 : Cercle ---
-float Rc                  = 500.0;   // Rayon cercle en mm — valeur par défaut
+//Mode 4 : Cercle
+float Rc                  = 500.0;   // Rayon cercle en mm 
 float L                   = 130.0;   // Entraxe robot en mm
-float consigne_pos_cercle = 0.0;     // calculé après saisie
+float consigne_pos_cercle = 0.0;    
 float CIBLE_G_C           = 0;
 float CIBLE_D_C           = 0;
 float Kp_Pos_C            = 5.0;
@@ -97,24 +100,20 @@ float cV_G_C = 0, cV_D_C = 0;
 #define INC_RAMPE_C  1.0
 #define TOLERANCE_C  100L
 
-// ===================== UTILITAIRES JOYSTICK =====================
+// JOYSTICK
 // Lit JX (A2) et renvoie : -1 (gauche/bas), 0 (neutre), +1 (droite/haut)
-// Un anti-rebond simple par délai est géré par l'appelant.
 int lireDirectionJX() {
   int jx = analogRead(A2);
   if (jx > 700 && jx < 999) return  1;   // droite / haut
-  if (jx < 300)              return -1;   // gauche / bas
+  if (jx < 300)               return -1;   // gauche / bas
   return 0;
 }
-
-// Renvoie true si le joystick est enfoncé (JX > 1000)
+// Renvoie true si le joystick est enfoncé
 bool joystickClick() {
   return (analogRead(A2) > 1000);
 }
 
-// ======================================================
-//                   AFFICHAGE MENU
-// ======================================================
+//                 AFFICHAGE MENU
 void afficherMenu() {
   lcd.clear();
   lcd.setCursor(0, 0);
@@ -124,12 +123,10 @@ void afficherMenu() {
   lcd.print("   Push to play");
 }
 
-// ======================================================
-//        ÉCRAN DE RÉGLAGE : VITESSE (Mode 1)
-//        Plage 50–250, pas 25, défaut 150
-// ======================================================
+//         ÉCRAN DE RÉGLAGE : VITESSE (Mode 1)
+//Plage 50–250, pas 25
+
 void reglageVitesseToutDroit() {
-  // vitesse_max_TD est déjà initialisée à 150
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("Vitesse (50-250)");
@@ -170,12 +167,9 @@ void reglageVitesseToutDroit() {
   }
 }
 
-// ======================================================
-//        ÉCRAN DE RÉGLAGE : RAYON (Mode 4)
-//        Plage 100–1000 mm, pas 50, défaut 500
-// ======================================================
+//         ÉCRAN DE RÉGLAGE : RAYON (Mode 4)
+//         Plage 100–1000 mm, pas 50
 void reglageRayonCercle() {
-  // Rc est déjà initialisée à 500
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("Rayon (100-1000)");
@@ -221,14 +215,10 @@ void reglageRayonCercle() {
   }
 }
 
-// ======================================================
-//                      SETUP
-// ======================================================
 void setup() {
   Serial.begin(115200);
 
   pinMode(43, OUTPUT);
-  digitalWrite(43, 0);
   initMoteurs();
   digitalWrite(43, 1);
 
@@ -237,13 +227,12 @@ void setup() {
   lcd.setRGB(colorR, colorG, colorB);
   lcd.clear();
 
-  // Pré-calcul des cibles cercle avec les valeurs par défaut
+  // calcul des cibles cercle avec les valeurs par défaut
   consigne_pos_cercle = (20950.0 / 500.0) * Rc;
   CIBLE_G_C = consigne_pos_cercle * ((Rc - (L / 2.0)) / Rc);
   CIBLE_D_C = consigne_pos_cercle * ((Rc + (L / 2.0)) / Rc);
 
-  // --- BOUCLE MENU ---
-  // JX (A2) : 300 < JX < 999  → naviguer  |  JX > 1000 → valider
+  //BOUCLE MENU
   afficherMenu();
 
   while (modeSelectionne == 0) {
@@ -254,7 +243,7 @@ void setup() {
       afficherMenu();
       delay(300);
     } else if (jx < 300) {
-      menuIndex = (menuIndex + 3) % 4;   // -1 mod 4
+      menuIndex = (menuIndex + 3) % 4;
       afficherMenu();
       delay(300);
     }
@@ -270,12 +259,11 @@ void setup() {
       delay(1200);
       lcd.clear();
 
-      // --- Écrans de réglage spécifiques au mode ---
       if (modeSelectionne == 1) {
-        // Mode Tout droit → choisir la vitesse
         reglageVitesseToutDroit();
+        // --- MESURE AU DEBUT DU MODE TOUT DROIT ---
+        distInit_TD = ultrasonic2.MeasureInCentimeters();
       } else if (modeSelectionne == 4) {
-        // Mode Cercle → choisir le rayon
         reglageRayonCercle();
       }
     }
@@ -289,9 +277,7 @@ void setup() {
   prevMicrosPos = micros();
 }
 
-// ======================================================
-//          FONCTION COMMUNE : BOUCLE VITESSE PI
-// ======================================================
+//           FONCTION COMMUNE : BOUCLE VITESSE PI
 void bouclePIVitesse(float cVG, float cVD) {
 
   // //Verification SurIntensité
@@ -299,10 +285,10 @@ void bouclePIVitesse(float cVG, float cVD) {
   // int valD = analogRead(PIN_COURANT_D);
 
   // if (valG > SEUIL_COURANT_MAX_G || valD > SEUIL_COURANT_MAX_D) {
-  //     surchargeDetectee = 1;
-  //     StopMoteurGD;
-  //     digitalWrite(43, 0); 
-  //     return;
+  //      surchargeDetectee = 1;
+  //      StopMoteurGD;
+  //      digitalWrite(43, 0); 
+  //      return;
   // }
   const float Te = 0.002;
 
@@ -335,9 +321,8 @@ void bouclePIVitesse(float cVG, float cVD) {
   MoteurGD((int)uG, (int)uD);
 }
 
-// ======================================================
-//               MODE 1 : TOUT DROIT
-// ======================================================
+//                MODE 1 : TOUT DROIT
+
 void loop_toutDroit() {
   long currentMicros = micros();
 
@@ -350,8 +335,15 @@ void loop_toutDroit() {
     if (abs((long)consigne_pos - pG) < TOLERANCE_TD &&
         abs((long)consigne_pos - pD) < TOLERANCE_TD) {
       StopMoteurGD;
+      // --- CALCUL DIFFERENCE ET AFFICHAGE ---
+      float distFinale = ultrasonic2.MeasureInCentimeters();
+      float diff = distInit_TD - distFinale;
       lcd.clear();
       lcd.setCursor(0, 0);
+      lcd.print("Diff: ");
+      lcd.print(diff);
+      lcd.print(" cm");
+      lcd.setCursor(0, 1);
       lcd.print("Arrive ! Stop.");
       while (1);
     }
@@ -369,9 +361,8 @@ void loop_toutDroit() {
   }
 }
 
-// ======================================================
-//             MODE 2 : SUIVI D'OBSTACLE
-// ======================================================
+//               MODE 2 : SUIVI D'OBSTACLE
+
 void loop_suiviObstacle() {
   long currentMicros = micros();
 
@@ -399,9 +390,8 @@ void loop_suiviObstacle() {
   }
 }
 
-// ======================================================
-//              MODE 3 : ROTATION 90°
-// ======================================================
+//               MODE 3 : ROTATION 90°
+
 void loop_rotation90() {
   long currentMicros = micros();
 
@@ -425,8 +415,13 @@ void loop_rotation90() {
     float vG_souh = ( CIBLE_90 - (float)pG) * Kp_Pos_R90;
     float vD_souh = (-CIBLE_90 - (float)pD) * Kp_Pos_R90;
 
-    cV_G_R90 = constrain(vG_souh, -vitesse_rampe_R90, vitesse_rampe_R90);
-    cV_D_R90 = constrain(vD_souh, -vitesse_rampe_R90, vitesse_rampe_R90);
+    cV_G_R90 = vG_souh;
+    if (cV_G_R90 >  vitesse_rampe_R90) cV_G_R90 =  vitesse_rampe_R90;
+    if (cV_G_R90 < -vitesse_rampe_R90) cV_G_R90 = -vitesse_rampe_R90;
+
+    cV_D_R90 = vD_souh;
+    if (cV_D_R90 >  vitesse_rampe_R90) cV_D_R90 =  vitesse_rampe_R90;
+    if (cV_D_R90 < -vitesse_rampe_R90) cV_D_R90 = -vitesse_rampe_R90;
   }
 
   if (micros() - prevMicrosVit >= TE_VIT_US) {
@@ -435,13 +430,11 @@ void loop_rotation90() {
   }
 }
 
-// ======================================================
-//              MODE 4 : CERCLE
-// ======================================================
+//               MODE 4 : CERCLE
+
 void loop_cercle() {
   long currentMicros = micros();
 
-  // Boucle position (10ms)
   if (currentMicros - prevMicrosPos >= TE_POS_US) {
     prevMicrosPos = currentMicros;
 
@@ -483,18 +476,14 @@ void loop_cercle() {
     cV_D_C = vD_souh;
   }
 
-  // Boucle vitesse (2ms)
   if (micros() - prevMicrosVit >= TE_VIT_US) {
     prevMicrosVit = micros();
     bouclePIVitesse(cV_G_C, cV_D_C);
   }
 }
 
-// ======================================================
-//                     LOOP PRINCIPAL
-// ======================================================
 void loop() {
-  // // Vérification de sécurité prioritaire
+  // // Vérification de surcharge
   // if (surchargeDetectee == 1) {
   //   StopMoteurGD;
   //   digitalWrite(43, 0);
