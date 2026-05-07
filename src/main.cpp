@@ -7,7 +7,7 @@
 rgb_lcd lcd;
 const int colorR = 255, colorG = 255, colorB = 255;
 
-// ===================== ENCODEURS ==================== =
+// ===================== ENCODEURS =====================
 Encoder knobG(18, 29);
 Encoder knobD(19, 27);
 
@@ -64,7 +64,7 @@ float consigne_vitesse = 0;
 // --- Mode 1 : Tout droit ---
 float Kp_Pos_TD      = 2.5;
 float consigne_pos   = 36000.0;
-float vitesse_max_TD = 250.0;
+float vitesse_max_TD = 150.0;   // valeur par défaut (modifiable via joystick)
 float vitesse_rampe_TD = 0;
 #define INC_RAMPE    1.0
 #define TOLERANCE_TD 100L
@@ -85,9 +85,9 @@ float cV_G_R90 = 0, cV_D_R90 = 0;
 #define ACCEL_MAX 1.2
 
 // --- Mode 4 : Cercle ---
-float Rc                  = 125.0;   // Rayon cercle en mm  ← modifié
+float Rc                  = 500.0;   // Rayon cercle en mm — valeur par défaut
 float L                   = 130.0;   // Entraxe robot en mm
-float consigne_pos_cercle = (20950.0 / 500.0) * Rc; // ← formule proportionnelle au rayon
+float consigne_pos_cercle = 0.0;     // calculé après saisie
 float CIBLE_G_C           = 0;
 float CIBLE_D_C           = 0;
 float Kp_Pos_C            = 5.0;
@@ -96,6 +96,21 @@ float vitesse_rampe_C     = 0;
 float cV_G_C = 0, cV_D_C = 0;
 #define INC_RAMPE_C  1.0
 #define TOLERANCE_C  100L
+
+// ===================== UTILITAIRES JOYSTICK =====================
+// Lit JX (A2) et renvoie : -1 (gauche/bas), 0 (neutre), +1 (droite/haut)
+// Un anti-rebond simple par délai est géré par l'appelant.
+int lireDirectionJX() {
+  int jx = analogRead(A2);
+  if (jx > 700 && jx < 999) return  1;   // droite / haut
+  if (jx < 300)              return -1;   // gauche / bas
+  return 0;
+}
+
+// Renvoie true si le joystick est enfoncé (JX > 1000)
+bool joystickClick() {
+  return (analogRead(A2) > 1000);
+}
 
 // ======================================================
 //                   AFFICHAGE MENU
@@ -107,6 +122,103 @@ void afficherMenu() {
   lcd.print(menuLabels[menuIndex]);
   lcd.setCursor(0, 1);
   lcd.print("   Push to play");
+}
+
+// ======================================================
+//        ÉCRAN DE RÉGLAGE : VITESSE (Mode 1)
+//        Plage 50–250, pas 25, défaut 150
+// ======================================================
+void reglageVitesseToutDroit() {
+  // vitesse_max_TD est déjà initialisée à 150
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Vitesse (50-250)");
+  lcd.setCursor(0, 1);
+  lcd.print("Val: ");
+  lcd.print((int)vitesse_max_TD);
+  lcd.print(" mm/s    ");
+
+  while (true) {
+    int dir = lireDirectionJX();
+
+    if (dir == 1) {
+      if (vitesse_max_TD < 250) vitesse_max_TD += 25;
+      lcd.setCursor(5, 1);
+      lcd.print((int)vitesse_max_TD);
+      lcd.print("      ");
+      delay(250);
+    } else if (dir == -1) {
+      if (vitesse_max_TD > 50) vitesse_max_TD -= 25;
+      lcd.setCursor(5, 1);
+      lcd.print((int)vitesse_max_TD);
+      lcd.print("      ");
+      delay(250);
+    }
+
+    // Validation par clic
+    if (joystickClick()) {
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("Vitesse OK :");
+      lcd.setCursor(0, 1);
+      lcd.print((int)vitesse_max_TD);
+      lcd.print(" mm/s");
+      delay(1200);
+      lcd.clear();
+      return;
+    }
+  }
+}
+
+// ======================================================
+//        ÉCRAN DE RÉGLAGE : RAYON (Mode 4)
+//        Plage 100–1000 mm, pas 50, défaut 500
+// ======================================================
+void reglageRayonCercle() {
+  // Rc est déjà initialisée à 500
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Rayon (100-1000)");
+  lcd.setCursor(0, 1);
+  lcd.print("R: ");
+  lcd.print((int)Rc);
+  lcd.print(" mm     ");
+
+  while (true) {
+    int dir = lireDirectionJX();
+
+    if (dir == 1) {
+      if (Rc < 1000) Rc += 50;
+      lcd.setCursor(3, 1);
+      lcd.print((int)Rc);
+      lcd.print("      ");
+      delay(250);
+    } else if (dir == -1) {
+      if (Rc > 100) Rc -= 50;
+      lcd.setCursor(3, 1);
+      lcd.print((int)Rc);
+      lcd.print("      ");
+      delay(250);
+    }
+
+    // Validation par clic
+    if (joystickClick()) {
+      // Recalcul des cibles avec le nouveau rayon
+      consigne_pos_cercle = (20950.0 / 500.0) * Rc;
+      CIBLE_G_C = consigne_pos_cercle * ((Rc - (L / 2.0)) / Rc);
+      CIBLE_D_C = consigne_pos_cercle * ((Rc + (L / 2.0)) / Rc);
+
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("Rayon OK :");
+      lcd.setCursor(0, 1);
+      lcd.print((int)Rc);
+      lcd.print(" mm");
+      delay(1200);
+      lcd.clear();
+      return;
+    }
+  }
 }
 
 // ======================================================
@@ -125,7 +237,8 @@ void setup() {
   lcd.setRGB(colorR, colorG, colorB);
   lcd.clear();
 
-  // Pré-calcul des cibles cercle
+  // Pré-calcul des cibles cercle avec les valeurs par défaut
+  consigne_pos_cercle = (20950.0 / 500.0) * Rc;
   CIBLE_G_C = consigne_pos_cercle * ((Rc - (L / 2.0)) / Rc);
   CIBLE_D_C = consigne_pos_cercle * ((Rc + (L / 2.0)) / Rc);
 
@@ -137,7 +250,7 @@ void setup() {
     int jx = analogRead(A2);
 
     if (jx > 700 && jx < 999) {
-      menuIndex = (menuIndex + 1) % 4;   // 4 modes désormais
+      menuIndex = (menuIndex + 1) % 4;
       afficherMenu();
       delay(300);
     } else if (jx < 300) {
@@ -148,13 +261,23 @@ void setup() {
 
     if (jx > 1000) {
       modeSelectionne = menuIndex + 1;
+
       lcd.clear();
       lcd.setCursor(0, 0);
       lcd.print("Mode choisi :");
       lcd.setCursor(0, 1);
       lcd.print(menuLabels[menuIndex]);
-      delay(1500);
+      delay(1200);
       lcd.clear();
+
+      // --- Écrans de réglage spécifiques au mode ---
+      if (modeSelectionne == 1) {
+        // Mode Tout droit → choisir la vitesse
+        reglageVitesseToutDroit();
+      } else if (modeSelectionne == 4) {
+        // Mode Cercle → choisir le rayon
+        reglageRayonCercle();
+      }
     }
   }
 
@@ -179,7 +302,7 @@ void bouclePIVitesse(float cVG, float cVD) {
   //     surchargeDetectee = 1;
   //     StopMoteurGD;
   //     digitalWrite(43, 0); 
-  //     return; // On sort immédiatement de la fonction
+  //     return;
   // }
   const float Te = 0.002;
 
@@ -375,13 +498,11 @@ void loop() {
   // if (surchargeDetectee == 1) {
   //   StopMoteurGD;
   //   digitalWrite(43, 0);
-    
   //   lcd.clear();
-  //   lcd.setRGB(255, 0, 0); // Écran Rouge
+  //   lcd.setRGB(255, 0, 0);
   //   lcd.setCursor(0, 0);
   //   lcd.print("SURCHARGE !");
-        
-  //   while(1); // Bloquage définitif du robot
+  //   while(1);
   // }
 
   switch (modeSelectionne) {
