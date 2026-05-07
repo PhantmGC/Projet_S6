@@ -228,7 +228,6 @@ void setup() {
   Serial.begin(115200);
 
   pinMode(43, OUTPUT);
-  digitalWrite(43, 0);
   initMoteurs();
   digitalWrite(43, 1);
 
