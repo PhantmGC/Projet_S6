@@ -43,7 +43,7 @@ int surchargeDetectee = 0;
 //MENU LCD
 int modeSelectionne = 0;
 int menuIndex = 0;
-const char* menuLabels[] = { "1.Tout droit", "2.Suivi obst.", "3.Rotation", "4.Cercle" };
+const char* menuLabels[] = { "1.Tout droit", "2.Suivi obst.", "3.Rotation 90", "4.Cercle" };
 
 //CONSTANTES COMMUNES
 #define TE_VIT_US  2000.0
@@ -78,11 +78,10 @@ float consigne_pos_SO = 1000000.0;
 float vitesse_max_SO  = 250.0;
 float cV_SO           = 0;
 
-//Mode 3 : Rotation
-float Kp_Pos_R90        = 6.0;
-float angle_rotation    = 90.0;
-float CIBLE_ROT         = 605.0;
-float vitesse_max_R90   = 50.0;
+//Mode 3 : Rotation 90°
+float Kp_Pos_R90      = 6.0;
+float CIBLE_90        = 605.0;
+float vitesse_max_R90 = 100.0;
 float vitesse_rampe_R90 = 0;
 float cV_G_R90 = 0, cV_D_R90 = 0;
 #define TOLERANCE_R90 50L
@@ -216,49 +215,6 @@ void reglageRayonCercle() {
   }
 }
 
-void reglageAngleRotation() {
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("Angle (45-360)");
-  lcd.setCursor(0, 1);
-  lcd.print("A: ");
-  lcd.print((int)angle_rotation);
-  lcd.print(" deg    ");
-
-  while (true) {
-    int dir = lireDirectionJX();
-
-    if (dir == 1) {
-      if (angle_rotation < 360) angle_rotation += 45;
-      lcd.setCursor(3, 1);
-      lcd.print((int)angle_rotation);
-      lcd.print("      ");
-      delay(250);
-    } else if (dir == -1) {
-      if (angle_rotation > 45) angle_rotation -= 45;
-      lcd.setCursor(3, 1);
-      lcd.print((int)angle_rotation);
-      lcd.print("      ");
-      delay(250);
-    }
-
-    if (joystickClick()) {
-      // Recalcul de la cible encodeur selon l'angle choisi
-      CIBLE_ROT = (660.0 / 90.0) * angle_rotation;
-
-      lcd.clear();
-      lcd.setCursor(0, 0);
-      lcd.print("Angle OK :");
-      lcd.setCursor(0, 1);
-      lcd.print((int)angle_rotation);
-      lcd.print(" deg");
-      delay(1200);
-      lcd.clear();
-      return;
-    }
-  }
-}
-
 void setup() {
   Serial.begin(115200);
 
@@ -305,9 +261,8 @@ void setup() {
 
       if (modeSelectionne == 1) {
         reglageVitesseToutDroit();
+        // --- MESURE AU DEBUT DU MODE TOUT DROIT ---
         distInit_TD = ultrasonic2.MeasureInCentimeters();
-      } else if (modeSelectionne == 3) {         // ← AJOUT
-        reglageAngleRotation();
       } else if (modeSelectionne == 4) {
         reglageRayonCercle();
       }
@@ -437,7 +392,7 @@ void loop_suiviObstacle() {
 
 //               MODE 3 : ROTATION 90°
 
-void loop_rotation() {   // renommé
+void loop_rotation90() {
   long currentMicros = micros();
 
   if (currentMicros - prevMicrosPos >= TE_POS_US) {
@@ -446,8 +401,8 @@ void loop_rotation() {   // renommé
     long pG = knobG.read();
     long pD = knobD.read();
 
-    if (abs((long) CIBLE_ROT - pG)  < TOLERANCE_R90 &&
-        abs((long)-CIBLE_ROT - pD) < TOLERANCE_R90) {
+    if (abs((long)CIBLE_90 - pG)  < TOLERANCE_R90 &&
+        abs((long)-CIBLE_90 - pD) < TOLERANCE_R90) {
       StopMoteurGD;
       lcd.clear();
       lcd.setCursor(0, 0);
@@ -457,11 +412,16 @@ void loop_rotation() {   // renommé
 
     if (vitesse_rampe_R90 < vitesse_max_R90) vitesse_rampe_R90 += ACCEL_MAX;
 
-    float vG_souh = ( CIBLE_ROT - (float)pG) * Kp_Pos_R90;
-    float vD_souh = (-CIBLE_ROT - (float)pD) * Kp_Pos_R90;
+    float vG_souh = ( CIBLE_90 - (float)pG) * Kp_Pos_R90;
+    float vD_souh = (-CIBLE_90 - (float)pD) * Kp_Pos_R90;
 
-    cV_G_R90 = constrain(vG_souh, -vitesse_rampe_R90, vitesse_rampe_R90);
-    cV_D_R90 = constrain(vD_souh, -vitesse_rampe_R90, vitesse_rampe_R90);
+    cV_G_R90 = vG_souh;
+    if (cV_G_R90 >  vitesse_rampe_R90) cV_G_R90 =  vitesse_rampe_R90;
+    if (cV_G_R90 < -vitesse_rampe_R90) cV_G_R90 = -vitesse_rampe_R90;
+
+    cV_D_R90 = vD_souh;
+    if (cV_D_R90 >  vitesse_rampe_R90) cV_D_R90 =  vitesse_rampe_R90;
+    if (cV_D_R90 < -vitesse_rampe_R90) cV_D_R90 = -vitesse_rampe_R90;
   }
 
   if (micros() - prevMicrosVit >= TE_VIT_US) {
@@ -537,7 +497,7 @@ void loop() {
   switch (modeSelectionne) {
     case 1: loop_toutDroit();     break;
     case 2: loop_suiviObstacle(); break;
-    case 3: loop_rotation();      break;
+    case 3: loop_rotation90();    break;
     case 4: loop_cercle();        break;
   }
 }
