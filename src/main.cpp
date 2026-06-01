@@ -73,10 +73,15 @@ float vitesse_rampe_TD = 0;
 #define TOLERANCE_TD 100L
 
 //Mode 2 : Suivi obstacle
-float Kp_Pos_SO       = 2.5;
-float consigne_pos_SO = 1000000.0;
-float vitesse_max_SO  = 250.0;
+float Kp_dist_SO      = 8.0;
+float vitesse_max_SO  = 200.0;
+float dist_mort_SO    = 1.5;
+float distRef_SO      = 0;
 float cV_SO           = 0;
+#define DIST_MIN_VALIDE          2.0    // en dessous = aberrant (echo perdu = 0)
+#define DIST_MAX_VALIDE          400.0  // au dessus = hors portee capteur
+#define NB_LECTURES_PERDUES_MAX  5      // nb de lectures aberrantes consecutives avant arret
+int compteurSignalPerdu = 0;
 
 //Mode 3 : Rotation
 float Kp_Pos_R90        = 6.0;
@@ -302,11 +307,14 @@ void setup() {
       lcd.print(menuLabels[menuIndex]);
       delay(1200);
       lcd.clear();
+      
 
       if (modeSelectionne == 1) {
         reglageVitesseToutDroit();
         distInit_TD = ultrasonic2.MeasureInCentimeters();
-      } else if (modeSelectionne == 3) {         // ← AJOUT
+      }else if (modeSelectionne == 2){
+        distRef_SO = ultrasonic1.MeasureInCentimeters();
+      } else if (modeSelectionne == 3) {         
         reglageAngleRotation();
       } else if (modeSelectionne == 4) {
         reglageRayonCercle();
@@ -414,19 +422,45 @@ void loop_suiviObstacle() {
   if (currentMicros - prevMicrosPos >= TE_POS_US) {
     prevMicrosPos = currentMicros;
 
-    long pG = knobG.read();
-    long pD = knobD.read();
     float dist = ultrasonic1.MeasureInCentimeters();
 
-    cV_SO = (consigne_pos_SO - ((pG + pD) / 2.0)) * Kp_Pos_SO;
+    // --- DETECTION PERTE DE SIGNAL ---
+    // Le capteur renvoie 0 (pas d'echo) ou une valeur hors portee
+    if (dist <= DIST_MIN_VALIDE || dist > DIST_MAX_VALIDE) {
+      compteurSignalPerdu++;
+      cV_SO = 0;                       // par securite on coupe la vitesse
 
-    float vLimDist;
-    if      (dist > 50) vLimDist = vitesse_max_SO;
-    else if (dist < 10) vLimDist = 0;
-    else                vLimDist = (dist - 10.0) * (vitesse_max_SO / 40.0);
+      if (compteurSignalPerdu >= NB_LECTURES_PERDUES_MAX) {
+        StopMoteurGD;
+        lcd.clear();
+        lcd.setRGB(255, 0, 0);         // ecran rouge pour signaler le defaut
+        lcd.setCursor(0, 0);
+        lcd.print("Signal perdu");
+        lcd.setCursor(0, 1);
+        lcd.print("Arret robot");
+        while (1);                     // arret definitif
+      }
+      return;
+    }
 
-    if (cV_SO > vLimDist) cV_SO = vLimDist;
-    if (cV_SO < 0)        cV_SO = 0;
+    // Lecture valide -> on remet le compteur a zero
+    compteurSignalPerdu = 0;
+
+    // Sécurité : obstacle trop proche
+    if (dist < 5.0) {
+      cV_SO = 0;
+      return;
+    }
+
+    float erreurDist = dist - distRef_SO;
+
+    if (abs(erreurDist) < dist_mort_SO) {
+      cV_SO = 0;
+    } else {
+      cV_SO = erreurDist * Kp_dist_SO;
+      if (cV_SO >  vitesse_max_SO) cV_SO =  vitesse_max_SO;
+      if (cV_SO < -vitesse_max_SO) cV_SO = -vitesse_max_SO;
+    }
   }
 
   if (micros() - prevMicrosVit >= TE_VIT_US) {
