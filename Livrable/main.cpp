@@ -78,11 +78,6 @@ float vitesse_max_SO  = 200.0;
 float dist_mort_SO    = 1.5;
 float distRef_SO      = 0;
 float cV_SO           = 0;
-#define DIST_MIN_VALIDE          2.0    // en dessous = aberrant (echo perdu = 0)
-#define DIST_MAX_VALIDE          400.0  // au dessus = hors portee capteur
-#define NB_LECTURES_PERDUES_MAX  2      // nb de lectures aberrantes consecutives avant arret
-int  compteurSignalPerdu = 0;
-bool signalPerduActif    = false;       // etat : signal actuellement perdu
 
 //Mode 3 : Rotation
 float Kp_Pos_R90        = 6.0;
@@ -425,40 +420,7 @@ void loop_suiviObstacle() {
 
     float dist = ultrasonic1.MeasureInCentimeters();
 
-    // --- PERTE DE SIGNAL : valeur aberrante (0 = pas d'echo, ou hors portee) ---
-    if (dist <= DIST_MIN_VALIDE || dist > DIST_MAX_VALIDE) {
-      cV_SO = 0;                          // coupe la vitesse par securite
-
-      if (compteurSignalPerdu < NB_LECTURES_PERDUES_MAX) compteurSignalPerdu++;
-
-      if (compteurSignalPerdu >= NB_LECTURES_PERDUES_MAX) {
-        StopMoteurGD;                     // robot a l'arret
-        if (!signalPerduActif) {          // on ecrit une seule fois (evite le clignotement)
-          signalPerduActif = true;
-          lcd.setRGB(255, 0, 0);          // ecran rouge = defaut
-          lcd.clear();
-          lcd.setCursor(0, 0);
-          lcd.print("Signal perdu");
-          lcd.setCursor(0, 1);
-          lcd.print("Recherche...");
-        }
-      }
-      return;   // on continue de lire le capteur au cycle suivant
-    }
-
-    // --- SIGNAL RETROUVE : on reprend la regulation ---
-    if (signalPerduActif) {
-      signalPerduActif = false;
-      Ci_G = 0; Ci_D = 0;                 // recalibration : repart proprement (pas de saut)
-      lcd.setRGB(colorR, colorG, colorB); // retour ecran normal
-      lcd.clear();
-      lcd.setCursor(0, 0);
-      lcd.print("Signal OK");
-      // distRef_SO (consigne de demarrage) est inchangee -> on repart dessus
-    }
-    compteurSignalPerdu = 0;
-
-    // Securite : obstacle trop proche
+    // Sécurité : obstacle trop proche
     if (dist < 5.0) {
       cV_SO = 0;
       return;
